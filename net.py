@@ -3,16 +3,41 @@ import os
 import numpy as np
 import random
 
+fractionOfDataUsedToTrain = .8
+L1SIZE = 200
+L2SIZE = 50
+L3SIZE = 50
+eta = .1
+dataPointsPerBatch = 100
+
+try:
+    totalDataPointsAvailable = 0
+    path = os.environ['MARKETDATADIR']
+    Market_Data = os.listdir(path)
+    for file in Market_Data:
+        fullPath = os.path.join(path, file)
+        with open(fullPath, 'r') as f:
+            numDays = len(f.readlines())
+            if numDays > L1SIZE:
+                totalDataPointsAvailable += numDays - L1SIZE
+except KeyError:
+    raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
+
+
+numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) / 10.)
+numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) / 10.)
+
 class net:
     
-    def __init__(self, LAYER1SIZE, LAYER2SIZE, LAYER3SIZE, eta, dataPointsPerBatch, numEpochs):
+    def __init__(self, LAYER1SIZE, LAYER2SIZE, LAYER3SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints):
         self.maxInitialWeight = .2
         self.LAYER1SIZE = LAYER1SIZE
         self.LAYER2SIZE = LAYER2SIZE
         self.LAYER3SIZE = LAYER3SIZE
         self.eta = eta
         self.dataPointsPerBatch = dataPointsPerBatch
-        self.numEpochs = numEpochs
+        self.numTrainingEpochs = numTrainingEpochs
+        self.numTestingPoints = numTestingPoints
         self.initializeWeights(self.maxInitialWeight)
         self.dataObj = data(self.LAYER1SIZE)
 
@@ -42,7 +67,7 @@ class net:
             layer3Values[L3Neuron] = self.sigmoid(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
         layer4Value = self.sigmoid(self.layer4Bias + np.dot(layer3Values, self.layer43Weights))
         squaredError = self.calculateSquaredError(layer4Value, self.neuronizeMarketData(trueResult))
-        correctDirection = self.sameSign(trueResult >= 0, self.inverseNeuronizeMarketData(layer4Value))
+        correctDirection = self.sameSign(trueResult, self.inverseNeuronizeMarketData(layer4Value))
         
         #Calculates gradient for training purposes
         gradientLayer21Weights = [[0 for x in range(self.LAYER1SIZE)] for y in range (self.LAYER2SIZE)]
@@ -93,7 +118,7 @@ class net:
         for L3Neuron in range (self.LAYER3SIZE):
             layer3Values[L3Neuron] = self.sigmoid(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
         layer4Value = self.sigmoid(self.layer4Bias + np.dot(layer3Values, self.layer43Weights))
-        return self.inverseNeuronizeMarketData(layer4Value), trueResult
+        return self.inverseNeuronizeMarketData(layer4Value)
 
     def runBatch(self):
         #Runs a batch of data, logs average gradients and error
@@ -107,7 +132,8 @@ class net:
         totalGradientLayer4Bias = 0
         
         for x in range (self.dataPointsPerBatch):
-            (correctDirection, newSquaredError, newGradientLayer21Weights, newGradientLayer32Weights, newGradientLayer43Weights,newGradientLayer2Biases, newGradientLayer3Biases, newGradientLayer4Bias) = self.sendThroughNetTrain(dataObj.getNewDataPoint()))
+            inputData, trueResult = self.dataObj.getNewDataPoint()
+            (correctDirection, newSquaredError, newGradientLayer21Weights, newGradientLayer32Weights, newGradientLayer43Weights,newGradientLayer2Biases, newGradientLayer3Biases, newGradientLayer4Bias) = self.sendThroughNetTrain(inputData, trueResult)
             
             if (correctDirection):
                 totalCorrectDirection += 1
@@ -119,7 +145,7 @@ class net:
             totalGradientLayer3Biases = np.add(totalGradientLayer3Biases, newGradientLayer3Biases)
             totalGradientLayer4Bias += newGradientLayer4Bias
 
-        correctDirectionRate = totalCorrectDirection / float(self.dataPointsPerBatch)
+        correctDirectionRate = float(totalCorrectDirection) / float(self.dataPointsPerBatch)
         averageSquaredError = totalSquaredError / float(self.dataPointsPerBatch)
         averageGradientLayer21Weights = np.divide(totalGradientLayer21Weights, float(self.dataPointsPerBatch))
         averageGradientLayer32Weights = np.divide(totalGradientLayer32Weights, float(self.dataPointsPerBatch))
@@ -129,19 +155,19 @@ class net:
         averageGradientLayer4Bias = totalGradientLayer4Bias / float(self.dataPointsPerBatch)
         
         #Updates weights and biases accordingly
-        self.layer21Weights = np.add(self.layer21Weights, np.multiply(averageGradientLayer21Weights, self.eta))
-        self.layer32Weights = np.add(self.layer32Weights, np.multiply(averageGradientLayer32Weights, self.eta))
-        self.layer43Weights = np.add(self.layer43Weights, np.multiply(averageGradientLayer43Weights, self.eta))
-        self.layer2Biases = np.add(self.layer2Biases, np.multiply(averageGradientLayer2Biases, self.eta))
-        self.layer3Biases = np.add(self.layer3Biases, np.multiply(averageGradientLayer3Biases, self.eta))
-        self.layer4Bias = self.layer4Bias + self.eta * averageGradientLayer4Bias
+        self.layer21Weights = np.subtract(self.layer21Weights, np.multiply(averageGradientLayer21Weights, self.eta))
+        self.layer32Weights = np.subtract(self.layer32Weights, np.multiply(averageGradientLayer32Weights, self.eta))
+        self.layer43Weights = np.subtract(self.layer43Weights, np.multiply(averageGradientLayer43Weights, self.eta))
+        self.layer2Biases = np.subtract(self.layer2Biases, np.multiply(averageGradientLayer2Biases, self.eta))
+        self.layer3Biases = np.subtract(self.layer3Biases, np.multiply(averageGradientLayer3Biases, self.eta))
+        self.layer4Bias = self.layer4Bias - self.eta * averageGradientLayer4Bias
         
         return averageSquaredError, correctDirectionRate
         
     def train(self):
-        for epoch in range (self.numEpochs):
+        for epoch in range (self.numTrainingEpochs):
             averageSquaredError, correctDirectionRate  = self.runBatch()
-            print("Epoch %r || Average Error = %r || Correct Direction Rate = %r" %(epoch, averageSquaredError, correctDirectionRate))
+            print("Epoch %r || Average Error = %r || Correct Direction Rate = %r" %(epoch, round(averageSquaredError, 4), correctDirectionRate))
                 
     def test(self):
         trueTotalUp = 0
@@ -149,7 +175,8 @@ class net:
         totalCorrectDirection = 0
         totalAbsoluteError = 0
         for test in range (numTestingPoints):
-            guessedResult, trueResult = self.sendThroughNetTest(dataObj.getNewDataPoint())
+            inputData, trueResult = self.dataObj.getNewDataPoint()
+            guessedResult= self.sendThroughNetTest(inputData, trueResult)
             if trueResult >= 0:
                 trueTotalUp += 1
             if guessedTotalUp >= 0:
@@ -164,8 +191,6 @@ class net:
         print("%r\% of days had their directions correctly guessed" %(totalCorrectDirection / numTestingPoints))
         print("Average absolute error is %r \% per day" %(totalAbsoluteError / numTestingPoints))
 
-
-
     @staticmethod
     def sameSign(x, y):
         return ((x >= 0 and y >= 0) or (x < 0 and y < 0))
@@ -176,12 +201,12 @@ class net:
 
     @staticmethod
     def neuronizeMarketData(x):
-    #TO CHANGE LATER MAYBE
+    #TO CHANGE LATER, MAYBE
         return (1. / (1. + np.exp(-1. * x)))
 
     @staticmethod
     def inverseNeuronizeMarketData(x):
-    #TO CHANGE LATER MAYBE
+    #TO CHANGE LATER, MAYBE
         return np.log(x / (1. - x))
         
     @staticmethod
@@ -200,25 +225,45 @@ class net:
 class data:
     def __init__(self, size):
         self.size = size
-        self.dataSet = [0 for x in range (self.size)]
-        self.trueResult = 0
-        self.indexAt = 0
         try:
-            path = os.environ['MARKETDATADIR']
+            self.path = os.environ['MARKETDATADIR']
         except KeyError:
-            raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in ./bash_profile')
+            raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
         self.permutedDataFiles = np.random.permutation(os.listdir(self.path))
+        self.dataFileAt = 0
+        self.getNewDataFile()
         
+    def getNewDataFile(self):
+        if self.dataFileAt >= len(self.permutedDataFiles):
+            raise IndexError("Ran out of data files")
+        fullPath = os.path.join(self.path, self.permutedDataFiles[self.dataFileAt])
+        with open(fullPath, 'r') as f:
+            self.currentDataFileInfo = f.readlines()
+        self.currentDataFileInfo = [float(line.rstrip('\%\n')) for line in self.currentDataFileInfo]
+        print("----------------New file opened: %r, file number %r----------------" %(self.permutedDataFiles[self.dataFileAt], self.dataFileAt))
+        self.dataFileAt += 1
+        self.indexAtWithinFile = -1
         
-        
-        
-    def getNewDataPoint():
-
-            with open(os.path.join(os.cwd(), filename), 'r') as f:
-
-
-    return self.dataSet[indexAt:] + self.dataSet[:indexAt], selftrueResult
+    def getNewDataPoint(self):
+        while np.abs(self.indexAtWithinFile - self.size - 1) > len(self.currentDataFileInfo):
+            self.getNewDataFile()
+        toReturn = self.currentDataFileInfo[self.indexAtWithinFile : self.indexAtWithinFile - self.size : -1], self.currentDataFileInfo[self.indexAtWithinFile - self.size]
+        self.indexAtWithinFile -= 1
+        #print(toReturn)
+        return toReturn
     
-    
-newNetwork = net(5, 200, 200, .2, 5, 10)
-newNetwork.train()
+print("Training neural net with the following parameters:")
+print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
+print("Layer 1 Size : %r neurons" %(L1SIZE))
+print("Layer 2 Size : %r neurons" %(L2SIZE))
+print("Layer 3 Size : %r neurons" %(L3SIZE))
+print("Layer 4 Size : 1 neuron")
+print("eta : %r" %(eta))
+print("Data Points per Batch : %r" %(dataPointsPerBatch))
+print("Number of Training Epochs : %r" %(numTrainingEpochs))
+print("Number of Testing Points : %r" %(numTestingPoints))
+print("Fraction of Data Used to Train : %r" %(fractionOfDataUsedToTrain))
+
+network = net(L1SIZE, L2SIZE, L3SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints)
+network.train()
+network.test()
