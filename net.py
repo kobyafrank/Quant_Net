@@ -2,13 +2,14 @@ import sys
 import os
 import numpy as np
 import random
+import time
 
 fractionOfDataUsedToTrain = .8
 L1SIZE = 200
 L2SIZE = 50
 L3SIZE = 50
-eta = 1
-dataPointsPerBatch = 40
+eta = .2
+dataPointsPerBatch = 25
 
 try:
     totalDataPointsAvailable = 0
@@ -162,10 +163,16 @@ class net:
     def train(self):
         averageSquaredErrorProgress = correctDirectionRateProgress = 0
         for epoch in range (self.numTrainingEpochs):
+            if (epoch == 0):
+                start = time.perf_counter()
             averageSquaredError, correctDirectionRate  = self.runBatch()
             averageSquaredErrorProgress += averageSquaredError
             correctDirectionRateProgress += correctDirectionRate
-            print("Epoch %r || MSE = %r || Correct Direction Rate = %r" %(epoch, round(averageSquaredError, 4), correctDirectionRate))
+            if (epoch == 0):
+                end = time.perf_counter()
+                timeElapsed = end - start
+                print("[At this rate of %r sec/epoch, it will take approximately %r seconds, or %r minutes, to train the neural net]\n" %(round(timeElapsed, 4), round(timeElapsed * self.numTrainingEpochs, 4), round((timeElapsed * self.numTrainingEpochs) / 60., 4)))
+            print("Epoch %r || Mean Squared Error = %r" %(epoch, round(averageSquaredError, 4)))
             if epoch % 20 == 0 and epoch != 0:
                 print("\nPROGRESS TRACKER: MSE Avg. = %r || Correct Direction Rate Avg. = %r\n" %(round(averageSquaredErrorProgress / float(epoch), 4), round(correctDirectionRateProgress / float(epoch), 4)))
         
@@ -283,7 +290,7 @@ class data:
         #print(toReturn)
         return toReturn
     
-print("Training neural net with the following parameters:")
+print("Training neural net with the following parameters")
 print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
 print("Layer 1 Size : %r neurons" %(L1SIZE))
 print("Layer 2 Size : %r neurons" %(L2SIZE))
@@ -302,7 +309,7 @@ print("------------BEGIN TESTING------------\n")
 network.test()
 print("\n------------END TESTING------------\n")
 
-print("Neural net was trained with the following parameters:")
+print("Neural net was trained with the following parameters")
 print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
 print("Layer 1 Size : %r neurons" %(L1SIZE))
 print("Layer 2 Size : %r neurons" %(L2SIZE))
