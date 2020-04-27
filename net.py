@@ -6,13 +6,13 @@ import time
 
 #try other neuronizing function
 
-fractionOfDataUsedToTrain = .8
+fractionOfDataUsedToTrain = .5
 L1SIZE = 30
 L2SIZE = 20
 L3SIZE = 20
 L4SIZE = 10
-eta = .02
-dataPointsPerBatch = 10
+eta = .005
+dataPointsPerBatch = 20
 
 try:
     totalDataPointsAvailable = 0
@@ -28,7 +28,7 @@ except KeyError:
     raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
 
 fractionOfTotalDataToUse = .1
-#numTrainingEpochs = 100
+#numTrainingEpochs = 5
 numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) * fractionOfTotalDataToUse)
 numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) * fractionOfTotalDataToUse)
 steepnessOfCostFunction = 2.5
@@ -36,8 +36,8 @@ steepnessOfCostFunction = 2.5
 class net:
 
     def __init__(self, LAYER1SIZE, LAYER2SIZE, LAYER3SIZE, LAYER4SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints):
-        self.neuronizingFunction = self.sigmoid
-        self.dNeuronizingFunctiondV = self.dSigmoiddV
+        self.neuronizingFunction = self.softplus
+        self.dNeuronizingFunctiondV = self.dSoftplusdV
         
         self.maxInitialWeight = .2
         self.LAYER1SIZE = LAYER1SIZE
@@ -85,7 +85,8 @@ class net:
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
             layer5Values[L5Neuron] = self.neuronizingFunction(self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron]))
-        print((self.normalizeArrayToPercentage(layer5Values), trueResult))
+        if random.uniform(0, 1) < .01:
+            print((self.normalizeArrayToPercentage(layer5Values), trueResult))
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
         correctDirection = self.sameSign(self.directionize(layer5Values), trueResult)
         
@@ -194,15 +195,15 @@ class net:
     def train(self):
         averageSquaredErrorProgress = correctDirectionRateProgress = 0
         for epoch in range (self.numTrainingEpochs):
-            if (epoch == 0):
+            if (epoch == 1):
                 start = time.perf_counter()
             averageSquaredError, correctDirectionRate  = self.runBatch()
             averageSquaredErrorProgress += averageSquaredError
             correctDirectionRateProgress += correctDirectionRate
-            if (epoch == 0):
+            if (epoch == 1):
                 end = time.perf_counter()
                 timeElapsed = end - start
-                print("\n[At this rate of %r sec/epoch, it will take approximately %r minutes, or %r hours, to train the neural net]\n" %(round(timeElapsed, 4), round((timeElapsed * self.numTrainingEpochs) / 60., 4), round((timeElapsed * self.numTrainingEpochs) / 3600., 4)))
+                print("\n[At this rate of %r sec/epoch, it will take approximately %r minutes, or %r hours, to train the neural net]\n" %(round(timeElapsed, 4), round((timeElapsed * self.numTrainingEpochs) / 60., 2), round((timeElapsed * self.numTrainingEpochs) / 3600., 3)))
             print("Epoch %r || Mean Squared Error = %r" %(epoch, round(averageSquaredError, 4)))
             if epoch % 20 == 0 and epoch != 0:
                 print("\nPROGRESS TRACKER: MSE Avg. = %r || Correct Direction Rate Avg. = %r\n" %(round(averageSquaredErrorProgress / float(epoch), 4), round(correctDirectionRateProgress / float(epoch), 4)))
@@ -222,8 +223,8 @@ class net:
             layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
         for L4Neuron in range (self.LAYER4SIZE):
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
-        for L5Neuron in range (self.LAYER4SIZE):
-            layer5Values[L5Neuron] = self.neuronizingFunction(self.layer5Biases[L5Neuron] + np.dot(layer5Values, self.layer54Weights[L5Neuron]))
+        for L5Neuron in range (self.LAYER5SIZE):
+            layer5Values[L5Neuron] = self.neuronizingFunction(self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron]))
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
         return self.normalizeArrayToPercentage(layer5Values)
         
@@ -310,14 +311,19 @@ class data:
             self.currentDataFileInfo = f.readlines()
         self.currentDataFileInfo = [float(line.rstrip('\%\n')) for line in self.currentDataFileInfo]
         print("\n---------------NEW FILE OPENED: %r, file number %r--------------\n" %(self.permutedDataFiles[self.dataFileAt], self.dataFileAt))
+        if (len(self.currentDataFileInfo) < 101):
+            return self.getNewDataFile()
         self.dataFileAt += 1
-        self.indexAtWithinFile = -1
+        self.indexAtWithinPermutedIndices = 0
+        self.permutedIndices = np.random.permutation([x for x in range (100, len(self.currentDataFileInfo))])
         
     def getNewDataPoint(self):
-        while np.abs(self.indexAtWithinFile - self.size - 1) > len(self.currentDataFileInfo):
+        while self.indexAtWithinPermutedIndices >= len(self.permutedIndices):
             self.getNewDataFile()
-        toReturn = self.currentDataFileInfo[self.indexAtWithinFile : self.indexAtWithinFile - self.size : -1], self.currentDataFileInfo[self.indexAtWithinFile - self.size]
-        self.indexAtWithinFile -= 1
+        index = self.permutedIndices[self.indexAtWithinPermutedIndices]
+        toReturn = self.currentDataFileInfo[index : index - self.size : -1], self.currentDataFileInfo[index - self.size]
+        self.indexAtWithinPermutedIndices += 1
+        #print(index)
         #print(toReturn)
         return toReturn
     
@@ -354,4 +360,3 @@ print("Data Points per Batch : %r" %(dataPointsPerBatch))
 print("Number of Training Epochs : %r" %(numTrainingEpochs))
 print("Number of Testing Points : %r" %(numTestingPoints))
 print("Fraction of Total Data Used: %r" %(fractionOfTotalDataToUse))
-
