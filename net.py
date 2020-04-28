@@ -4,10 +4,10 @@ import numpy as np
 import random
 import time
 
-fractionOfDataUsedToTrain = .25
+fractionOfDataUsedToTrain = .3
 L1SIZE = 25
-L2SIZE = 30
-L3SIZE = 20
+L2SIZE = 20
+L3SIZE = 15
 L4SIZE = 10
 eta = .05
 dataPointsPerBatch = 100
@@ -26,7 +26,7 @@ except KeyError:
     raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
 
 fractionOfTotalDataToUse = .1
-#numTrainingEpochs = 10
+#numTrainingEpochs = 1
 numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) * fractionOfTotalDataToUse)
 numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) * fractionOfTotalDataToUse)
 steepnessOfCostFunction = 2.5
@@ -255,6 +255,12 @@ class net:
         trueTotalUp = 0
         guessedTotalUp = 0
         totalCorrectDirection = 0
+        correctPointSixPlus = 0
+        totalPointSixPlus = 0
+        correctPointSevenPlus = 0
+        totalPointSevenPlus = 0
+        correctPointEightPlus = 0
+        totalPointEightPlus = 0
         for test in range (numTestingPoints):
             inputData, trueResult = self.dataObj.getNewDataPoint()
             guessedResult = self.sendThroughNetTest(inputData, trueResult)
@@ -264,6 +270,24 @@ class net:
             if guessedUp:
                 guessedTotalUp += 1
             correctDirection = self.sameSign(self.directionize(guessedResult), trueResult)
+            if guessedResult[0] <= .2 or guessedResult[0] >= .8:
+                totalPointEightPlus += 1
+                totalPointSevenPlus += 1
+                totalPointSixPlus += 1
+                if correctDirection:
+                    correctPointEightPlus += 1
+                    correctPointSevenPlus += 1
+                    correctPointSixPlus += 1
+            elif guessedResult[0] <= .3 or guessedResult[0] >= .7:
+                totalPointSevenPlus += 1
+                totalPointSixPlus += 1
+                if correctDirection:
+                    correctPointSevenPlus += 1
+                    correctPointSixPlus += 1
+            elif guessedResult[0] <= .4 or guessedResult[0] >= .6:
+                totalPointSixPlus += 1
+                if correctDirection:
+                    correctPointSixPlus += 1
             if correctDirection:
                 totalCorrectDirection += 1
             print("Test %r || True Value = %r || Correct : %r || Guessed %r%% Up, %r%% Down" %(test, trueResult, correctDirection, round(guessedResult[0] * 100., 4), round(guessedResult[1] * 100., 4)))
@@ -271,7 +295,9 @@ class net:
         print("%r fraction of days were truly positive" %(float(trueTotalUp) / float(numTestingPoints)))
         print("%r fraction of days were guessed to be positive" %(float(guessedTotalUp) / float(numTestingPoints)))
         print("%r fraction of days had their directions correctly guessed" %(float(totalCorrectDirection) / float(numTestingPoints)))
-
+        print("%r fraction of days with confidence over .6 had their directions correctly guessed, or %r / %r" %(float(correctPointSixPlus) / float(totalPointSixPlus), correctPointSixPlus, totalPointSixPlus))
+        print("%r fraction of days with confidence over .7 had their directions correctly guessed, or %r / %r" %(float(correctPointSevenPlus) / float(totalPointSevenPlus), correctPointSevenPlus, totalPointSevenPlus))
+        print("%r fraction of days with confidence over .8 had their directions correctly guessed, or %r / %r" %(float(correctPointEightPlus) / float(totalPointEightPlus), correctPointEightPlus, totalPointEightPlus))
 
     @staticmethod
     def sameSign(x, y):
