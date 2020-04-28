@@ -4,15 +4,13 @@ import numpy as np
 import random
 import time
 
-#try other neuronizing function
-
-fractionOfDataUsedToTrain = .5
-L1SIZE = 30
-L2SIZE = 20
+fractionOfDataUsedToTrain = .25
+L1SIZE = 25
+L2SIZE = 30
 L3SIZE = 20
 L4SIZE = 10
-eta = .005
-dataPointsPerBatch = 20
+eta = .05
+dataPointsPerBatch = 100
 
 try:
     totalDataPointsAvailable = 0
@@ -28,7 +26,7 @@ except KeyError:
     raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
 
 fractionOfTotalDataToUse = .1
-#numTrainingEpochs = 5
+#numTrainingEpochs = 10
 numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) * fractionOfTotalDataToUse)
 numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) * fractionOfTotalDataToUse)
 steepnessOfCostFunction = 2.5
@@ -38,8 +36,8 @@ class net:
     def __init__(self, LAYER1SIZE, LAYER2SIZE, LAYER3SIZE, LAYER4SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints):
         self.neuronizingFunction = self.softplus
         self.dNeuronizingFunctiondV = self.dSoftplusdV
+        print("Using %r neuronizing function" %(self.neuronizingFunction.__name__))
         
-        self.maxInitialWeight = .2
         self.LAYER1SIZE = LAYER1SIZE
         self.LAYER2SIZE = LAYER2SIZE
         self.LAYER3SIZE = LAYER3SIZE
@@ -49,23 +47,46 @@ class net:
         self.dataPointsPerBatch = dataPointsPerBatch
         self.numTrainingEpochs = numTrainingEpochs
         self.numTestingPoints = numTestingPoints
-        self.initializeWeights(self.maxInitialWeight)
         self.dataObj = data(self.LAYER1SIZE)
+        if self.neuronizingFunction == self.SELU:
+            self.initializeWeightsLeCun()
+        else:
+            self.initializeWeightsXavier()
 
-    def initializeWeights(self, maxInitialWeight):
-        #Initializes biases and weights for random small floats
-        self.layer2Biases = [random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER2SIZE)]
-        self.layer3Biases = [random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER3SIZE)]
-        self.layer4Biases = [random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER4SIZE)]
-        self.layer5Biases = [random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER5SIZE)]
+    def initializeWeightsXavier(self):
+        print("\nUsing Xavier initializing function\n")
+        self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
+        self.layer3Biases = [0 for x in range (self.LAYER3SIZE)]
+        self.layer4Biases = [0 for x in range (self.LAYER4SIZE)]
+        self.layer5Biases = [0 for x in range (self.LAYER5SIZE)]
         
-        self.layer21Weights = [[random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER1SIZE)] \
+        constant = np.sqrt(6.) / np.sqrt(self.LAYER1SIZE + self.LAYER2SIZE)
+        self.layer21Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER1SIZE)] \
             for y in range (self.LAYER2SIZE)]
-        self.layer32Weights = [[random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER2SIZE)] \
+        constant = np.sqrt(6.) / np.sqrt(self.LAYER2SIZE + self.LAYER3SIZE)
+        self.layer32Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER2SIZE)] \
             for y in range (self.LAYER3SIZE)]
-        self.layer43Weights = [[random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER3SIZE)] \
+        constant = np.sqrt(6.) / np.sqrt(self.LAYER3SIZE + self.LAYER4SIZE)
+        self.layer43Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER3SIZE)] \
             for y in range (self.LAYER4SIZE)]
-        self.layer54Weights = [[random.uniform(-1 * maxInitialWeight, maxInitialWeight) for x in range (self.LAYER4SIZE)] \
+        constant = np.sqrt(6.) / np.sqrt(self.LAYER4SIZE + self.LAYER5SIZE)
+        self.layer54Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER4SIZE)] \
+            for y in range (self.LAYER5SIZE)]
+    
+    def initializeWeightsLeCun(self):
+        print("\nUsing LeCun initializing function\n")
+        self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
+        self.layer3Biases = [0 for x in range (self.LAYER3SIZE)]
+        self.layer4Biases = [0 for x in range (self.LAYER4SIZE)]
+        self.layer5Biases = [0 for x in range (self.LAYER5SIZE)]
+    
+        self.layer21Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER2SIZE)) for x in range (self.LAYER1SIZE)] \
+            for y in range (self.LAYER2SIZE)]
+        self.layer32Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER3SIZE)) for x in range (self.LAYER2SIZE)] \
+            for y in range (self.LAYER3SIZE)]
+        self.layer43Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER4SIZE)) for x in range (self.LAYER3SIZE)] \
+            for y in range (self.LAYER4SIZE)]
+        self.layer54Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER5SIZE)) for x in range (self.LAYER4SIZE)] \
             for y in range (self.LAYER5SIZE)]
 
     def sendThroughNetTrain(self, inputData, trueResult):
@@ -84,9 +105,10 @@ class net:
         for L4Neuron in range (self.LAYER4SIZE):
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
-            layer5Values[L5Neuron] = self.neuronizingFunction(self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron]))
-        if random.uniform(0, 1) < .01:
-            print((self.normalizeArrayToPercentage(layer5Values), trueResult))
+            layer5Values[L5Neuron] = self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron])
+        layer5Values = self.softmax(layer5Values)
+        if random.uniform(0, 1) < .02:
+            print((layer5Values, trueResult))
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
         correctDirection = self.sameSign(self.directionize(layer5Values), trueResult)
         
@@ -107,7 +129,7 @@ class net:
                 dCostdL5PostNeuronizingFunction = 2 * (layer5Values[L5Neuron] - flattened)
             else:
                 dCostdL5PostNeuronizingFunction = 2 * (layer5Values[L5Neuron] - (1 - flattened))
-            dL5PostNeuronizingFunctiondL5V = self.dNeuronizingFunctiondV(layer5Values[L5Neuron])
+            dL5PostNeuronizingFunctiondL5V = self.dSoftmaxdV(layer5Values, L5Neuron)
             gradientLayer5Biases[L5Neuron] = dCostdL5PostNeuronizingFunction * dL5PostNeuronizingFunctiondL5V
             
             for L4Neuron in range (self.LAYER4SIZE):
@@ -206,7 +228,7 @@ class net:
                 print("\n[At this rate of %r sec/epoch, it will take approximately %r minutes, or %r hours, to train the neural net]\n" %(round(timeElapsed, 4), round((timeElapsed * self.numTrainingEpochs) / 60., 2), round((timeElapsed * self.numTrainingEpochs) / 3600., 3)))
             print("Epoch %r || Mean Squared Error = %r" %(epoch, round(averageSquaredError, 4)))
             if epoch % 20 == 0 and epoch != 0:
-                print("\nPROGRESS TRACKER: MSE Avg. = %r || Correct Direction Rate Avg. = %r\n" %(round(averageSquaredErrorProgress / float(epoch), 4), round(correctDirectionRateProgress / float(epoch), 4)))
+                print("\nPROGRESS TRACKER: MSE Avg. = %r || Correct Direction Rate = %r\n" %(round(averageSquaredErrorProgress / float(epoch), 4), round(correctDirectionRateProgress / float(epoch), 4)))
         
     def sendThroughNetTest(self, inputData, trueResult):
         #Calculates output of neural net with input "inputData"
@@ -224,9 +246,10 @@ class net:
         for L4Neuron in range (self.LAYER4SIZE):
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
-            layer5Values[L5Neuron] = self.neuronizingFunction(self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron]))
+            layer5Values[L5Neuron] = self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron])
+        layer5Values = self.softmax(layer5Values)
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
-        return self.normalizeArrayToPercentage(layer5Values)
+        return layer5Values
         
     def test(self):
         trueTotalUp = 0
@@ -267,13 +290,21 @@ class net:
         return (guess[0] - flattened)**2 + (guess[1] - (1 - flattened))**2
 
     @staticmethod
-    def normalizeArrayToPercentage(ls):
+    def softmax(ls):
         sum = 0
+        m = max(ls)
         for x in ls:
-            if x < 0:
-                raise ValueError("Negative value in list, cannot normalize to percentage")
-            sum += x
-        return [x / float(sum) for x in ls]
+            sum += np.exp(x - m)
+        return [np.exp(i - m) / sum for i in ls]
+        
+    @staticmethod
+    def dSoftmaxdV(ls, i):
+        sum = 0
+        m = max(ls)
+        for x in ls:
+            sum += np.exp(x - m)
+        s = np.exp(i - m) / sum
+        return s * (1 - s)
 
     @staticmethod
     def softplus(x):
@@ -283,6 +314,24 @@ class net:
     def dSoftplusdV(x):
         return (1. / (1. + np.exp(-1. * x)))
     
+    @staticmethod
+    def SELU(x):
+        alpha = 1.6732632423543772848170429916717
+        gamma = 1.0507009873554804934193349852946
+        if x > 0:
+            return gamma * x
+        else:
+            return gamma * alpha * (np.exp(x) - 1.)
+        
+    @staticmethod
+    def dSELUdV(x):
+        alpha = 1.6732632423543772848170429916717
+        gamma = 1.0507009873554804934193349852946
+        if x > 0:
+            return gamma
+        else:
+            return gamma * alpha * np.exp(x)
+        
     @staticmethod
     def sigmoid(x):
         return (1. / (1. + np.exp(-1. * x)))
@@ -315,7 +364,7 @@ class data:
             return self.getNewDataFile()
         self.dataFileAt += 1
         self.indexAtWithinPermutedIndices = 0
-        self.permutedIndices = np.random.permutation([x for x in range (100, len(self.currentDataFileInfo))])
+        self.permutedIndices = np.random.permutation([x for x in range (L1SIZE + 1, len(self.currentDataFileInfo))])
         
     def getNewDataPoint(self):
         while self.indexAtWithinPermutedIndices >= len(self.permutedIndices):
@@ -327,7 +376,7 @@ class data:
         #print(toReturn)
         return toReturn
     
-print("Training neural net with the following parameters")
+print("\nTraining neural net with the following parameters")
 print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
 print("Layer 1 Size : %r neurons" %(L1SIZE))
 print("Layer 2 Size : %r neurons" %(L2SIZE))
