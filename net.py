@@ -5,8 +5,8 @@ import random
 import time
 
 fractionOfDataUsedToTrain = .3
-L1SIZE = 25
-L2SIZE = 20
+L1SIZE = 20
+L2SIZE = 30
 L3SIZE = 15
 L4SIZE = 10
 eta = .05
@@ -29,14 +29,16 @@ fractionOfTotalDataToUse = .1
 #numTrainingEpochs = 1
 numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) * fractionOfTotalDataToUse)
 numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) * fractionOfTotalDataToUse)
-steepnessOfCostFunction = 2.5
+steepnessOfCostFunction = 1
 
 class net:
 
     def __init__(self, LAYER1SIZE, LAYER2SIZE, LAYER3SIZE, LAYER4SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints):
-        self.neuronizingFunction = self.softplus
-        self.dNeuronizingFunctiondV = self.dSoftplusdV
+        self.neuronizingFunction = self.SELU
+        self.dNeuronizingFunctiondV = self.dSELUdV
         print("Using %r neuronizing function" %(self.neuronizingFunction.__name__))
+        
+        self.printCounter = 0
         
         self.LAYER1SIZE = LAYER1SIZE
         self.LAYER2SIZE = LAYER2SIZE
@@ -107,8 +109,9 @@ class net:
         for L5Neuron in range (self.LAYER5SIZE):
             layer5Values[L5Neuron] = self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron])
         layer5Values = self.softmax(layer5Values)
-        if random.uniform(0, 1) < .02:
+        if self.printCounter ==  0:
             print((layer5Values, trueResult))
+        self.printCounter = (self.printCounter + 1) % 100
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
         correctDirection = self.sameSign(self.directionize(layer5Values), trueResult)
         
@@ -261,6 +264,8 @@ class net:
         totalPointSevenPlus = 0
         correctPointEightPlus = 0
         totalPointEightPlus = 0
+        correctPointNinePlus = 0
+        totalPointNinePlus = 0
         for test in range (numTestingPoints):
             inputData, trueResult = self.dataObj.getNewDataPoint()
             guessedResult = self.sendThroughNetTest(inputData, trueResult)
@@ -270,7 +275,17 @@ class net:
             if guessedUp:
                 guessedTotalUp += 1
             correctDirection = self.sameSign(self.directionize(guessedResult), trueResult)
-            if guessedResult[0] <= .2 or guessedResult[0] >= .8:
+            if guessedResult[0] <= .1 or guessedResult[0] >= .9:
+                totalPointNinePlus += 1
+                totalPointEightPlus += 1
+                totalPointSevenPlus += 1
+                totalPointSixPlus += 1
+                if correctDirection:
+                    correctPointNinePlus += 1
+                    correctPointEightPlus += 1
+                    correctPointSevenPlus += 1
+                    correctPointSixPlus += 1
+            elif guessedResult[0] <= .2 or guessedResult[0] >= .8:
                 totalPointEightPlus += 1
                 totalPointSevenPlus += 1
                 totalPointSixPlus += 1
@@ -295,9 +310,26 @@ class net:
         print("%r fraction of days were truly positive" %(float(trueTotalUp) / float(numTestingPoints)))
         print("%r fraction of days were guessed to be positive" %(float(guessedTotalUp) / float(numTestingPoints)))
         print("%r fraction of days had their directions correctly guessed" %(float(totalCorrectDirection) / float(numTestingPoints)))
-        print("%r fraction of days with confidence over .6 had their directions correctly guessed, or %r / %r" %(float(correctPointSixPlus) / float(totalPointSixPlus), correctPointSixPlus, totalPointSixPlus))
-        print("%r fraction of days with confidence over .7 had their directions correctly guessed, or %r / %r" %(float(correctPointSevenPlus) / float(totalPointSevenPlus), correctPointSevenPlus, totalPointSevenPlus))
-        print("%r fraction of days with confidence over .8 had their directions correctly guessed, or %r / %r" %(float(correctPointEightPlus) / float(totalPointEightPlus), correctPointEightPlus, totalPointEightPlus))
+        if totalPointSixPlus > 0:
+            ratio = float(correctPointSixPlus) / float(totalPointSixPlus)
+        else:
+            ratio = 0.
+        print("%r fraction of days with confidence over .6 had their directions correctly guessed, or %r / %r" %(ratio, correctPointSixPlus, totalPointSixPlus))
+        if totalPointSevenPlus > 0:
+            ratio = float(correctPointSevenPlus) / float(totalPointSevenPlus)
+        else:
+            ratio = 0.
+        print("%r fraction of days with confidence over .7 had their directions correctly guessed, or %r / %r" %(ratio, correctPointSevenPlus, totalPointSevenPlus))
+        if totalPointEightPlus > 0:
+            ratio = float(correctPointEightPlus) / float(totalPointEightPlus)
+        else:
+            ratio = 0.
+        print("%r fraction of days with confidence over .8 had their directions correctly guessed, or %r / %r" %(ratio, correctPointEightPlus, totalPointEightPlus))
+        if totalPointNinePlus > 0:
+            ratio = float(correctPointNinePlus) / float(totalPointNinePlus)
+        else:
+            ratio = 0.
+        print("%r fraction of days with confidence over .9 had their directions correctly guessed, or %r / %r" %(ratio, correctPointNinePlus, totalPointNinePlus))
 
     @staticmethod
     def sameSign(x, y):
@@ -393,7 +425,7 @@ class data:
         self.permutedIndices = np.random.permutation([x for x in range (L1SIZE + 1, len(self.currentDataFileInfo))])
         
     def getNewDataPoint(self):
-        while self.indexAtWithinPermutedIndices >= len(self.permutedIndices):
+        while (self.indexAtWithinPermutedIndices >= len(self.permutedIndices)) or (self.indexAtWithinPermutedIndices >= len(self.permutedIndices) * (fractionOfTotalDataToUse + .01)):
             self.getNewDataFile()
         index = self.permutedIndices[self.indexAtWithinPermutedIndices]
         toReturn = self.currentDataFileInfo[index : index - self.size : -1], self.currentDataFileInfo[index - self.size]
