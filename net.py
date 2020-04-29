@@ -4,13 +4,8 @@ import numpy as np
 import random
 import time
 
-fractionOfDataUsedToTrain = .3
-L1SIZE = 20
-L2SIZE = 30
-L3SIZE = 15
-L4SIZE = 10
-eta = .05
-dataPointsPerBatch = 100
+sizeOfInput = 10
+inTuple = (sizeOfInput, 100)
 
 try:
     totalDataPointsAvailable = 0
@@ -20,36 +15,63 @@ try:
         fullPath = os.path.join(path, file)
         with open(fullPath, 'r') as f:
             numDays = len(f.readlines())
-            if numDays > L1SIZE:
-                totalDataPointsAvailable += numDays - L1SIZE
+            if numDays > sizeOfInput:
+                totalDataPointsAvailable += numDays - sizeOfInput
 except KeyError:
     raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
 
-fractionOfTotalDataToUse = .1
+fractionOfDataUsedToTrain = .5
+eta = .05
+dataPointsPerBatch = 100
+fractionOfTotalDataToUse = .001
 #numTrainingEpochs = 1
 numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) * fractionOfTotalDataToUse)
 numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) * fractionOfTotalDataToUse)
-steepnessOfCostFunction = 1
+steepnessOfCostFunction = 1.
 
 class net:
 
-    def __init__(self, LAYER1SIZE, LAYER2SIZE, LAYER3SIZE, LAYER4SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints):
-        self.neuronizingFunction = self.SELU
-        self.dNeuronizingFunctiondV = self.dSELUdV
-        print("Using %r neuronizing function" %(self.neuronizingFunction.__name__))
-        
+    def __init__(self, layerSizeTuple, ETA = eta, DATAPOINTSPERBATCH = dataPointsPerBatch, NUMTRAININGEPOCHS = numTrainingEpochs, NUMTESTINGPOINTS = numTestingPoints):
         self.printCounter = 0
         
-        self.LAYER1SIZE = LAYER1SIZE
-        self.LAYER2SIZE = LAYER2SIZE
-        self.LAYER3SIZE = LAYER3SIZE
-        self.LAYER4SIZE = LAYER4SIZE
+        self.neuronizingFunction = self.sigmoid
+        self.dNeuronizingFunctiondV = self.dSigmoiddV
+        print("Using %r neuronizing function" %(self.neuronizingFunction.__name__))
+        
+        if len(layerSizeTuple) == 2:
+            self.numLayers = 3
+            a, b = layerSizeTuple
+            self.LAYER1SIZE = 0
+            self.LAYER2SIZE = 0
+            self.LAYER3SIZE = a
+            self.LAYER4SIZE = b
+            self.INPUTLAYERSIZE = self.LAYER3SIZE
+        elif len(layerSizeTuple) == 3:
+            self.numLayers = 4
+            a, b, c = layerSizeTuple
+            self.LAYER1SIZE = 0
+            self.LAYER2SIZE = a
+            self.LAYER3SIZE = b
+            self.LAYER4SIZE = c
+            self.INPUTLAYERSIZE = self.LAYER2SIZE
+        elif len(layerSizeTuple) == 4:
+            self.numLayers = 5
+            a, b, c, d = layerSizeTuple
+            self.LAYER1SIZE = a
+            self.LAYER2SIZE = b
+            self.LAYER3SIZE = c
+            self.LAYER4SIZE = d
+            self.INPUTLAYERSIZE = self.LAYER1SIZE
+        else:
+            raise ValueError("net.py only supports 3, 4, or 5 layered networks. Please enter tuple of length 2, 3, or 4, respectively.")
+        
         self.LAYER5SIZE = 2
-        self.eta = eta
-        self.dataPointsPerBatch = dataPointsPerBatch
-        self.numTrainingEpochs = numTrainingEpochs
-        self.numTestingPoints = numTestingPoints
-        self.dataObj = data(self.LAYER1SIZE)
+        
+        self.eta = ETA
+        self.dataPointsPerBatch = DATAPOINTSPERBATCH
+        self.numTrainingEpochs = NUMTRAININGEPOCHS
+        self.numTestingPoints = NUMTESTINGPOINTS
+        self.dataObj = data(self.INPUTLAYERSIZE)
         if self.neuronizingFunction == self.SELU:
             self.initializeWeightsLeCun()
         else:
@@ -57,17 +79,21 @@ class net:
 
     def initializeWeightsXavier(self):
         print("\nUsing Xavier initializing function\n")
-        self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
-        self.layer3Biases = [0 for x in range (self.LAYER3SIZE)]
+        if self.numLayers >= 5:
+            self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
+        if self.numLayers >= 4:
+            self.layer3Biases = [0 for x in range (self.LAYER3SIZE)]
         self.layer4Biases = [0 for x in range (self.LAYER4SIZE)]
         self.layer5Biases = [0 for x in range (self.LAYER5SIZE)]
         
-        constant = np.sqrt(6.) / np.sqrt(self.LAYER1SIZE + self.LAYER2SIZE)
-        self.layer21Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER1SIZE)] \
-            for y in range (self.LAYER2SIZE)]
-        constant = np.sqrt(6.) / np.sqrt(self.LAYER2SIZE + self.LAYER3SIZE)
-        self.layer32Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER2SIZE)] \
-            for y in range (self.LAYER3SIZE)]
+        if self.numLayers >= 5:
+            constant = np.sqrt(6.) / np.sqrt(self.LAYER1SIZE + self.LAYER2SIZE)
+            self.layer21Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER1SIZE)] \
+                for y in range (self.LAYER2SIZE)]
+        if self.numLayers >= 4:
+            constant = np.sqrt(6.) / np.sqrt(self.LAYER2SIZE + self.LAYER3SIZE)
+            self.layer32Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER2SIZE)] \
+                for y in range (self.LAYER3SIZE)]
         constant = np.sqrt(6.) / np.sqrt(self.LAYER3SIZE + self.LAYER4SIZE)
         self.layer43Weights = [[random.uniform(-1. * constant, constant) for x in range (self.LAYER3SIZE)] \
             for y in range (self.LAYER4SIZE)]
@@ -77,15 +103,19 @@ class net:
     
     def initializeWeightsLeCun(self):
         print("\nUsing LeCun initializing function\n")
-        self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
-        self.layer3Biases = [0 for x in range (self.LAYER3SIZE)]
+        if self.numLayers >= 5:
+            self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
+        if self.numLayers >= 4:
+            self.layer3Biases = [0 for x in range (self.LAYER3SIZE)]
         self.layer4Biases = [0 for x in range (self.LAYER4SIZE)]
         self.layer5Biases = [0 for x in range (self.LAYER5SIZE)]
     
-        self.layer21Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER2SIZE)) for x in range (self.LAYER1SIZE)] \
-            for y in range (self.LAYER2SIZE)]
-        self.layer32Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER3SIZE)) for x in range (self.LAYER2SIZE)] \
-            for y in range (self.LAYER3SIZE)]
+        if self.numLayers >= 5:
+            self.layer21Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER2SIZE)) for x in range (self.LAYER1SIZE)] \
+                for y in range (self.LAYER2SIZE)]
+        if self.numLayers >= 4:
+            self.layer32Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER3SIZE)) for x in range (self.LAYER2SIZE)] \
+                for y in range (self.LAYER3SIZE)]
         self.layer43Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER4SIZE)) for x in range (self.LAYER3SIZE)] \
             for y in range (self.LAYER4SIZE)]
         self.layer54Weights = [[np.random.normal(0, 1 / np.sqrt(self.LAYER5SIZE)) for x in range (self.LAYER4SIZE)] \
@@ -93,17 +123,29 @@ class net:
 
     def sendThroughNetTrain(self, inputData, trueResult):
         #Calculates output of neural net with input "inputData"
-        if len(inputData) != self.LAYER1SIZE:
-            raise ValueError("Input data is not of length %r" % self.LAYER1SIZE)
-        layer1Values = inputData
-        layer2Values = [0 for x in range (self.LAYER2SIZE)]
-        layer3Values = [0 for x in range (self.LAYER3SIZE)]
+        if self.numLayers == 5:
+            if len(inputData) != self.LAYER1SIZE:
+                raise ValueError("Input data is not of length %r" % self.LAYER1SIZE)
+            layer1Values = inputData
+            layer2Values = [0 for x in range (self.LAYER2SIZE)]
+            layer3Values = [0 for x in range (self.LAYER3SIZE)]
+            for L2Neuron in range (self.LAYER2SIZE):
+                layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
+            for L3Neuron in range (self.LAYER3SIZE):
+                layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+        elif self.numLayers == 4:
+            if len(inputData) != self.LAYER2SIZE:
+                raise ValueError("Input data is not of length %r" % self.LAYER2SIZE)
+            layer2Values = inputData
+            layer3Values = [0 for x in range (self.LAYER3SIZE)]
+            for L3Neuron in range (self.LAYER3SIZE):
+                layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+        else:
+            if len(inputData) != self.LAYER3SIZE:
+                raise ValueError("Input data is not of length %r" % self.LAYER3SIZE)
+            layer3Values = inputData
         layer4Values = [0 for x in range (self.LAYER4SIZE)]
         layer5Values = [0 for x in range (self.LAYER5SIZE)]
-        for L2Neuron in range (self.LAYER2SIZE):
-            layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
-        for L3Neuron in range (self.LAYER3SIZE):
-            layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
         for L4Neuron in range (self.LAYER4SIZE):
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
@@ -116,15 +158,19 @@ class net:
         correctDirection = self.sameSign(self.directionize(layer5Values), trueResult)
         
         #Calculates gradient for training purposes
-        gradientLayer21Weights = [[0 for x in range(self.LAYER1SIZE)] for y in range (self.LAYER2SIZE)]
-        gradientLayer32Weights = [[0 for x in range(self.LAYER2SIZE)] for y in range (self.LAYER3SIZE)]
-        gradientLayer43Weights = [[0 for x in range(self.LAYER3SIZE)] for y in range (self.LAYER4SIZE)]
-        gradientLayer54Weights = [[0 for x in range(self.LAYER4SIZE)] for y in range (self.LAYER5SIZE)]
+        if self.numLayers == 5:
+            gradientLayer2Biases = [0 for x in range(self.LAYER2SIZE)]
+            gradientLayer3Biases = [0 for x in range(self.LAYER3SIZE)]
+            gradientLayer21Weights = [[0 for x in range(self.LAYER1SIZE)] for y in range (self.LAYER2SIZE)]
+            gradientLayer32Weights = [[0 for x in range(self.LAYER2SIZE)] for y in range (self.LAYER3SIZE)]
+        elif self.numLayers == 4:
+            gradientLayer3Biases = [0 for x in range(self.LAYER3SIZE)]
+            gradientLayer32Weights = [[0 for x in range(self.LAYER2SIZE)] for y in range (self.LAYER3SIZE)]
         
-        gradientLayer2Biases = [0 for x in range(self.LAYER2SIZE)]
-        gradientLayer3Biases = [0 for x in range(self.LAYER3SIZE)]
         gradientLayer4Biases = [0 for x in range(self.LAYER4SIZE)]
         gradientLayer5Biases = [0 for x in range(self.LAYER5SIZE)]
+        gradientLayer43Weights = [[0 for x in range(self.LAYER3SIZE)] for y in range (self.LAYER4SIZE)]
+        gradientLayer54Weights = [[0 for x in range(self.LAYER4SIZE)] for y in range (self.LAYER5SIZE)]
         
         for L5Neuron in range (self.LAYER5SIZE):
             flattened = (1. / (1. + np.exp(-1. * steepnessOfCostFunction * trueResult)))
@@ -146,72 +192,97 @@ class net:
                 for L3Neuron in range (self.LAYER3SIZE):
                     dL4VdL43Weight = layer3Values[L3Neuron]
                     gradientLayer43Weights[L4Neuron][L3Neuron] += gradientLayer4Biases[L4Neuron] * dL4VdL43Weight
-        
-                    dL4VdL3PostNeuronizingFunction = self.layer43Weights[L4Neuron][L3Neuron]
-                    dL3PostNeuronizingFunctiondL3V = self.dNeuronizingFunctiondV(layer3Values[L3Neuron])
-                    gradientLayer3Biases[L3Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V)
-            
-                    for L2Neuron in range (self.LAYER2SIZE):
-                        dL3VdL32Weight = layer2Values[L2Neuron]
-                        gradientLayer32Weights[L3Neuron][L2Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL32Weight)
-                
-                        dL3VdL2PostNeuronizingFunction = self.layer32Weights[L3Neuron][L2Neuron]
-                        dL2PostNeuronizingFunctiondL2V = self.dNeuronizingFunctiondV(layer2Values[L2Neuron])
-                        gradientLayer2Biases[L2Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL2PostNeuronizingFunction * dL2PostNeuronizingFunctiondL2V)
-                
-                        for L1Neuron in range (self.LAYER1SIZE):
-                            dL2VdL21Weights = layer1Values[L1Neuron]
-                            gradientLayer21Weights[L2Neuron][L1Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL2PostNeuronizingFunction * dL2PostNeuronizingFunctiondL2V * dL2VdL21Weights)
                     
-        return (correctDirection, squaredError, gradientLayer21Weights, gradientLayer32Weights, gradientLayer43Weights, gradientLayer54Weights,
-            gradientLayer2Biases, gradientLayer3Biases, gradientLayer4Biases, gradientLayer5Biases)
+                    if self.numLayers >= 4:
+                        dL4VdL3PostNeuronizingFunction = self.layer43Weights[L4Neuron][L3Neuron]
+                        dL3PostNeuronizingFunctiondL3V = self.dNeuronizingFunctiondV(layer3Values[L3Neuron])
+                        gradientLayer3Biases[L3Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V)
+            
+                        for L2Neuron in range (self.LAYER2SIZE):
+                            dL3VdL32Weight = layer2Values[L2Neuron]
+                            gradientLayer32Weights[L3Neuron][L2Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL32Weight)
+                            
+                            if self.numLayers >= 5:
+                                dL3VdL2PostNeuronizingFunction = self.layer32Weights[L3Neuron][L2Neuron]
+                                dL2PostNeuronizingFunctiondL2V = self.dNeuronizingFunctiondV(layer2Values[L2Neuron])
+                                gradientLayer2Biases[L2Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL2PostNeuronizingFunction * dL2PostNeuronizingFunctiondL2V)
+                
+                                for L1Neuron in range (self.LAYER1SIZE):
+                                    dL2VdL21Weights = layer1Values[L1Neuron]
+                                    gradientLayer21Weights[L2Neuron][L1Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL2PostNeuronizingFunction * dL2PostNeuronizingFunctiondL2V * dL2VdL21Weights)
+           
+        if self.numLayers == 5:
+            return (correctDirection, squaredError, gradientLayer21Weights, gradientLayer32Weights, gradientLayer43Weights, gradientLayer54Weights, gradientLayer2Biases, gradientLayer3Biases, gradientLayer4Biases, gradientLayer5Biases)
+        elif self.numLayers == 4:
+            return (correctDirection, squaredError, gradientLayer32Weights, gradientLayer43Weights, gradientLayer54Weights, gradientLayer3Biases, gradientLayer4Biases, gradientLayer5Biases)
+        else:
+            return (correctDirection, squaredError, gradientLayer43Weights, gradientLayer54Weights, gradientLayer4Biases, gradientLayer5Biases)
 
     def runBatch(self):
         #Runs a batch of data, logs average gradients and error
         totalCorrectDirection = 0
         totalSquaredError = 0
-        totalGradientLayer21Weights = [[0 for x in range(self.LAYER1SIZE)] for y in range (self.LAYER2SIZE)]
-        totalGradientLayer32Weights = [[0 for x in range(self.LAYER2SIZE)] for y in range (self.LAYER3SIZE)]
+        
+        if self.numLayers == 5:
+            totalGradientLayer21Weights = [[0 for x in range(self.LAYER1SIZE)] for y in range (self.LAYER2SIZE)]
+            totalGradientLayer2Biases = [0 for x in range(self.LAYER2SIZE)]
+        if self.numLayers == 4:
+            totalGradientLayer32Weights = [[0 for x in range(self.LAYER2SIZE)] for y in range (self.LAYER3SIZE)]
+            totalGradientLayer3Biases = [0 for x in range(self.LAYER3SIZE)]
+            
         totalGradientLayer43Weights = [[0 for x in range(self.LAYER3SIZE)] for y in range (self.LAYER4SIZE)]
         totalGradientLayer54Weights = [[0 for x in range(self.LAYER4SIZE)] for y in range (self.LAYER5SIZE)]
-        totalGradientLayer2Biases = [0 for x in range(self.LAYER2SIZE)]
-        totalGradientLayer3Biases = [0 for x in range(self.LAYER3SIZE)]
         totalGradientLayer4Biases = [0 for x in range(self.LAYER4SIZE)]
         totalGradientLayer5Biases = [0 for x in range(self.LAYER5SIZE)]
         
         for x in range (self.dataPointsPerBatch):
             inputData, trueResult = self.dataObj.getNewDataPoint()
-            (correctDirection, newSquaredError, newGradientLayer21Weights, newGradientLayer32Weights, newGradientLayer43Weights, newGradientLayer54Weights, newGradientLayer2Biases, newGradientLayer3Biases, newGradientLayer4Biases, newGradientLayer5Biases) = self.sendThroughNetTrain(inputData, trueResult)
+            resTuple = self.sendThroughNetTrain(inputData, trueResult)
+            if self.numLayers == 5:
+                correctDirection, newSquaredError, newGradientLayer21Weights, newGradientLayer32Weights, newGradientLayer43Weights, newGradientLayer54Weights, newGradientLayer2Biases, newGradientLayer3Biases, newGradientLayer4Biases, newGradientLayer5Biases = resTuple
+            elif self.numLayers == 4:
+                correctDirection, newSquaredError, newGradientLayer32Weights, newGradientLayer43Weights, newGradientLayer54Weights, newGradientLayer3Biases, newGradientLayer4Biases, newGradientLayer5Biases = resTuple
+            elif self.numLayers == 3:
+                correctDirection, newSquaredError, newGradientLayer43Weights, newGradientLayer54Weights, newGradientLayer4Biases, newGradientLayer5Biases = resTuple
+            else:
+                raise ValueError("Unforseen number of layers")
+            
             if (correctDirection):
                 totalCorrectDirection += 1
             totalSquaredError += newSquaredError
-            totalGradientLayer21Weights = np.add(totalGradientLayer21Weights, newGradientLayer21Weights)
-            totalGradientLayer32Weights = np.add(totalGradientLayer32Weights, newGradientLayer32Weights)
+            if self.numLayers == 5:
+                totalGradientLayer21Weights = np.add(totalGradientLayer21Weights, newGradientLayer21Weights)
+                totalGradientLayer2Biases = np.add(totalGradientLayer2Biases, newGradientLayer2Biases)
+            if self.numLayers == 4:
+                totalGradientLayer32Weights = np.add(totalGradientLayer32Weights, newGradientLayer32Weights)
+                totalGradientLayer3Biases = np.add(totalGradientLayer3Biases, newGradientLayer3Biases)
             totalGradientLayer43Weights = np.add(totalGradientLayer43Weights, newGradientLayer43Weights)
             totalGradientLayer54Weights = np.add(totalGradientLayer54Weights, newGradientLayer54Weights)
-            totalGradientLayer2Biases = np.add(totalGradientLayer2Biases, newGradientLayer2Biases)
-            totalGradientLayer3Biases = np.add(totalGradientLayer3Biases, newGradientLayer3Biases)
             totalGradientLayer4Biases = np.add(totalGradientLayer4Biases, newGradientLayer4Biases)
             totalGradientLayer5Biases = np.add(totalGradientLayer5Biases, newGradientLayer5Biases)
 
         correctDirectionRate = float(totalCorrectDirection) / float(self.dataPointsPerBatch)
         averageSquaredError = totalSquaredError / float(self.dataPointsPerBatch)
-        averageGradientLayer21Weights = np.divide(totalGradientLayer21Weights, float(self.dataPointsPerBatch))
-        averageGradientLayer32Weights = np.divide(totalGradientLayer32Weights, float(self.dataPointsPerBatch))
+        if self.numLayers == 5:
+            averageGradientLayer21Weights = np.divide(totalGradientLayer21Weights, float(self.dataPointsPerBatch))
+            averageGradientLayer2Biases = np.divide(totalGradientLayer2Biases, float(self.dataPointsPerBatch))
+        if self.numLayers == 4:
+            averageGradientLayer32Weights = np.divide(totalGradientLayer32Weights, float(self.dataPointsPerBatch))
+            averageGradientLayer3Biases = np.divide(totalGradientLayer3Biases, float(self.dataPointsPerBatch))
         averageGradientLayer43Weights = np.divide(totalGradientLayer43Weights, float(self.dataPointsPerBatch))
         averageGradientLayer54Weights = np.divide(totalGradientLayer54Weights, float(self.dataPointsPerBatch))
-        averageGradientLayer2Biases = np.divide(totalGradientLayer2Biases, float(self.dataPointsPerBatch))
-        averageGradientLayer3Biases = np.divide(totalGradientLayer3Biases, float(self.dataPointsPerBatch))
         averageGradientLayer4Biases = np.divide(totalGradientLayer4Biases, float(self.dataPointsPerBatch))
         averageGradientLayer5Biases = np.divide(totalGradientLayer5Biases, float(self.dataPointsPerBatch))
         
         #Updates weights and biases accordingly
-        self.layer21Weights = np.subtract(self.layer21Weights, np.multiply(averageGradientLayer21Weights, self.eta))
-        self.layer32Weights = np.subtract(self.layer32Weights, np.multiply(averageGradientLayer32Weights, self.eta))
+        if self.numLayers == 5:
+            self.layer21Weights = np.subtract(self.layer21Weights, np.multiply(averageGradientLayer21Weights, self.eta))
+            self.layer2Biases = np.subtract(self.layer2Biases, np.multiply(averageGradientLayer2Biases, self.eta))
+        if self.numLayers == 4:
+            self.layer32Weights = np.subtract(self.layer32Weights, np.multiply(averageGradientLayer32Weights, self.eta))
+            self.layer3Biases = np.subtract(self.layer3Biases, np.multiply(averageGradientLayer3Biases, self.eta))
         self.layer43Weights = np.subtract(self.layer43Weights, np.multiply(averageGradientLayer43Weights, self.eta))
         self.layer54Weights = np.subtract(self.layer54Weights, np.multiply(averageGradientLayer54Weights, self.eta))
-        self.layer2Biases = np.subtract(self.layer2Biases, np.multiply(averageGradientLayer2Biases, self.eta))
-        self.layer3Biases = np.subtract(self.layer3Biases, np.multiply(averageGradientLayer3Biases, self.eta))
         self.layer4Biases = np.subtract(self.layer4Biases, np.multiply(averageGradientLayer4Biases, self.eta))
         self.layer5Biases = np.subtract(self.layer5Biases, np.multiply(averageGradientLayer5Biases, self.eta))
         
@@ -235,17 +306,29 @@ class net:
         
     def sendThroughNetTest(self, inputData, trueResult):
         #Calculates output of neural net with input "inputData"
-        if len(inputData) != self.LAYER1SIZE:
-            raise ValueError("Input data is not of length %r" % self.LAYER1SIZE)
-        layer1Values = inputData
-        layer2Values = [0 for x in range (self.LAYER2SIZE)]
-        layer3Values = [0 for x in range (self.LAYER3SIZE)]
+        if self.numLayers == 5:
+            if len(inputData) != self.LAYER1SIZE:
+                raise ValueError("Input data is not of length %r" % self.LAYER1SIZE)
+            layer1Values = inputData
+            layer2Values = [0 for x in range (self.LAYER2SIZE)]
+            layer3Values = [0 for x in range (self.LAYER3SIZE)]
+            for L2Neuron in range (self.LAYER2SIZE):
+                layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
+            for L3Neuron in range (self.LAYER3SIZE):
+                layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+        elif self.numLayers == 4:
+            if len(inputData) != self.LAYER2SIZE:
+                raise ValueError("Input data is not of length %r" % self.LAYER2SIZE)
+            layer2Values = inputData
+            layer3Values = [0 for x in range (self.LAYER3SIZE)]
+            for L3Neuron in range (self.LAYER3SIZE):
+                layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+        else:
+            if len(inputData) != self.LAYER3SIZE:
+                raise ValueError("Input data is not of length %r" % self.LAYER3SIZE)
+            layer3Values = inputData
         layer4Values = [0 for x in range (self.LAYER4SIZE)]
         layer5Values = [0 for x in range (self.LAYER5SIZE)]
-        for L2Neuron in range (self.LAYER2SIZE):
-            layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
-        for L3Neuron in range (self.LAYER3SIZE):
-            layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
         for L4Neuron in range (self.LAYER4SIZE):
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
@@ -422,7 +505,7 @@ class data:
             return self.getNewDataFile()
         self.dataFileAt += 1
         self.indexAtWithinPermutedIndices = 0
-        self.permutedIndices = np.random.permutation([x for x in range (L1SIZE + 1, len(self.currentDataFileInfo))])
+        self.permutedIndices = np.random.permutation([x for x in range (sizeOfInput + 1, len(self.currentDataFileInfo))])
         
     def getNewDataPoint(self):
         while (self.indexAtWithinPermutedIndices >= len(self.permutedIndices)) or (self.indexAtWithinPermutedIndices >= len(self.permutedIndices) * (fractionOfTotalDataToUse + .01)):
@@ -434,20 +517,23 @@ class data:
         #print(toReturn)
         return toReturn
     
+network = net(inTuple)
+
 print("\nTraining neural net with the following parameters")
 print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
-print("Layer 1 Size : %r neurons" %(L1SIZE))
-print("Layer 2 Size : %r neurons" %(L2SIZE))
-print("Layer 3 Size : %r neurons" %(L3SIZE))
-print("Layer 4 Size : %r neurons" %(L4SIZE))
-print("Layer 5 Size : 2 neurons")
-print("eta : %r" %(eta))
-print("Data Points per Batch : %r" %(dataPointsPerBatch))
-print("Number of Training Epochs : %r" %(numTrainingEpochs))
-print("Number of Testing Points : %r" %(numTestingPoints))
 print("Fraction of Total Data Used: %r" %(fractionOfTotalDataToUse))
+print("Steepness of Cost Function = %r" %(steepnessOfCostFunction))
+print("Number of Layers : %r layers" %(network.numLayers))
+print("Layer 1 Size : %r neurons" %(network.LAYER1SIZE))
+print("Layer 2 Size : %r neurons" %(network.LAYER2SIZE))
+print("Layer 3 Size : %r neurons" %(network.LAYER3SIZE))
+print("Layer 4 Size : %r neurons" %(network.LAYER4SIZE))
+print("Layer 5 Size : %r neurons" %(network.LAYER5SIZE))
+print("eta : %r" %(network.eta))
+print("Data Points per Batch : %r" %(network.dataPointsPerBatch))
+print("Number of Training Epochs : %r" %(network.numTrainingEpochs))
+print("Number of Testing Points : %r" %(network.numTestingPoints))
 
-network = net(L1SIZE, L2SIZE, L3SIZE, L4SIZE, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints)
 network.train()
 print("\n------------END TRAINING------------")
 print("------------BEGIN TESTING------------\n")
@@ -456,14 +542,14 @@ print("\n------------END TESTING------------\n")
 
 print("Neural net was trained with the following parameters")
 print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
-print("Layer 1 Size : %r neurons" %(L1SIZE))
-print("Layer 2 Size : %r neurons" %(L2SIZE))
-print("Layer 3 Size : %r neurons" %(L3SIZE))
-print("Layer 4 Size : %r neurons" %(L4SIZE))
-print("Layer 5 Size : 2 neurons")
-print("Steepness of Cost Function : %r" %(steepnessOfCostFunction))
-print("eta : %r" %(eta))
-print("Data Points per Batch : %r" %(dataPointsPerBatch))
-print("Number of Training Epochs : %r" %(numTrainingEpochs))
-print("Number of Testing Points : %r" %(numTestingPoints))
 print("Fraction of Total Data Used: %r" %(fractionOfTotalDataToUse))
+print("Number of Layers : %r layers" %(network.numLayers))
+print("Layer 1 Size : %r neurons" %(network.LAYER1SIZE))
+print("Layer 2 Size : %r neurons" %(network.LAYER2SIZE))
+print("Layer 3 Size : %r neurons" %(network.LAYER3SIZE))
+print("Layer 4 Size : %r neurons" %(network.LAYER4SIZE))
+print("Layer 5 Size : %r neurons" %(network.LAYER5SIZE))
+print("eta : %r" %(network.eta))
+print("Data Points per Batch : %r" %(network.dataPointsPerBatch))
+print("Number of Training Epochs : %r" %(network.numTrainingEpochs))
+print("Number of Testing Points : %r" %(network.numTestingPoints))
