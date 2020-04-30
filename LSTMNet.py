@@ -3,40 +3,26 @@ import os
 import numpy as np
 import random
 import time
+from dataManager import data
 
-sizeOfInput = 10
-inTuple = (sizeOfInput, 100)
+frequencyOfPrint = 400
 
-try:
-    totalDataPointsAvailable = 0
-    path = os.environ['MARKETDATADIR']
-    Market_Data = os.listdir(path)
-    for file in Market_Data:
-        fullPath = os.path.join(path, file)
-        with open(fullPath, 'r') as f:
-            numDays = len(f.readlines())
-            if numDays > sizeOfInput:
-                totalDataPointsAvailable += numDays - sizeOfInput
-except KeyError:
-    raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
+class LSTMNet:
 
-fractionOfDataUsedToTrain = .5
-eta = .05
-dataPointsPerBatch = 100
-fractionOfTotalDataToUse = .001
-#numTrainingEpochs = 1
-numTrainingEpochs = int(((totalDataPointsAvailable / dataPointsPerBatch * fractionOfDataUsedToTrain) // 1) * fractionOfTotalDataToUse)
-numTestingPoints = int(((totalDataPointsAvailable * (1 - fractionOfDataUsedToTrain)) // 1) * fractionOfTotalDataToUse)
-steepnessOfCostFunction = 1.
-
-class net:
-
-    def __init__(self, layerSizeTuple, ETA = eta, DATAPOINTSPERBATCH = dataPointsPerBatch, NUMTRAININGEPOCHS = numTrainingEpochs, NUMTESTINGPOINTS = numTestingPoints):
+    def __init__(self, layerSizeTuple, neuronizingFunction, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints, fractionOfTotalDataToUse, steepnessOfCostFunction):
         self.printCounter = 0
         
-        self.neuronizingFunction = self.sigmoid
-        self.dNeuronizingFunctiondV = self.dSigmoiddV
-        print("Using %r neuronizing function" %(self.neuronizingFunction.__name__))
+        if neuronizingFunction == "SELU" or neuronizingFunction == "Selu" or neuronizingFunction == "elu":
+            self.neuronizingFunction = self.SELU
+            self.dNeuronizingFunctiondV = self.dSELUdV
+        elif neuronizingFunction == "SIGMOID" or neuronizingFunction == "Sigmoid" or neuronizingFunction == "sigmoid":
+            self.neuronizingFunction = self.sigmoid
+            self.dNeuronizingFunctiondV = self.dSigmoiddV
+        elif neuronizingFunction == "SOFTPLUS" or neuronizingFunction == "Softplus" or neuronizingFunction == "softplus":
+            self.neuronizingFunction = self.softplus
+            self.dNeuronizingFunctiondV = self.dSoftplusdV
+        else:
+            raise ValueError("Invalid neuronizing function. Please choose between SELU, Sigmoid, and Softplus")
         
         if len(layerSizeTuple) == 2:
             self.numLayers = 3
@@ -63,22 +49,21 @@ class net:
             self.LAYER4SIZE = d
             self.INPUTLAYERSIZE = self.LAYER1SIZE
         else:
-            raise ValueError("net.py only supports 3, 4, or 5 layered networks. Please enter tuple of length 2, 3, or 4, respectively.")
-        
+            raise ValueError("net.py only supports 3, 4, or 5 layered networks. Please enter tuple of length 2, 3, or 4, respectively, in the form (layerOneSize, layerTwoSize, (layerThreeSize), (layerFourSize)), where the final layer is not of variable length so you should not set it.")
         self.LAYER5SIZE = 2
         
-        self.eta = ETA
-        self.dataPointsPerBatch = DATAPOINTSPERBATCH
-        self.numTrainingEpochs = NUMTRAININGEPOCHS
-        self.numTestingPoints = NUMTESTINGPOINTS
-        self.dataObj = data(self.INPUTLAYERSIZE)
+        self.eta = eta
+        self.dataPointsPerBatch = dataPointsPerBatch
+        self.numTrainingEpochs = numTrainingEpochs
+        self.numTestingPoints = numTestingPoints
+        self.steepnessOfCostFunction = steepnessOfCostFunction
+        self.dataObj = data(self.INPUTLAYERSIZE, fractionOfTotalDataToUse)
         if self.neuronizingFunction == self.SELU:
             self.initializeWeightsLeCun()
         else:
             self.initializeWeightsXavier()
 
     def initializeWeightsXavier(self):
-        print("\nUsing Xavier initializing function\n")
         if self.numLayers >= 5:
             self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
         if self.numLayers >= 4:
@@ -102,7 +87,6 @@ class net:
             for y in range (self.LAYER5SIZE)]
     
     def initializeWeightsLeCun(self):
-        print("\nUsing LeCun initializing function\n")
         if self.numLayers >= 5:
             self.layer2Biases = [0 for x in range (self.LAYER2SIZE)]
         if self.numLayers >= 4:
@@ -153,7 +137,7 @@ class net:
         layer5Values = self.softmax(layer5Values)
         if self.printCounter ==  0:
             print((layer5Values, trueResult))
-        self.printCounter = (self.printCounter + 1) % 100
+        self.printCounter = (self.printCounter + 1) % frequencyOfPrint
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
         correctDirection = self.sameSign(self.directionize(layer5Values), trueResult)
         
@@ -173,7 +157,7 @@ class net:
         gradientLayer54Weights = [[0 for x in range(self.LAYER4SIZE)] for y in range (self.LAYER5SIZE)]
         
         for L5Neuron in range (self.LAYER5SIZE):
-            flattened = (1. / (1. + np.exp(-1. * steepnessOfCostFunction * trueResult)))
+            flattened = (1. / (1. + np.exp(-1. * self.steepnessOfCostFunction * trueResult)))
             if (L5Neuron == 0):
                 dCostdL5PostNeuronizingFunction = 2 * (layer5Values[L5Neuron] - flattened)
             else:
@@ -349,7 +333,7 @@ class net:
         totalPointEightPlus = 0
         correctPointNinePlus = 0
         totalPointNinePlus = 0
-        for test in range (numTestingPoints):
+        for test in range (self.numTestingPoints):
             inputData, trueResult = self.dataObj.getNewDataPoint()
             guessedResult = self.sendThroughNetTest(inputData, trueResult)
             guessedUp = (1 == self.directionize(guessedResult))
@@ -388,11 +372,12 @@ class net:
                     correctPointSixPlus += 1
             if correctDirection:
                 totalCorrectDirection += 1
-            print("Test %r || True Value = %r || Correct : %r || Guessed %r%% Up, %r%% Down" %(test, trueResult, correctDirection, round(guessedResult[0] * 100., 4), round(guessedResult[1] * 100., 4)))
+            if test % 500 == 0:
+                print("Test %r || True Value = %r || Correct : %r || Guessed %r%% Up, %r%% Down" %(test, trueResult, correctDirection, round(guessedResult[0] * 100., 4), round(guessedResult[1] * 100., 4)))
         print("Testing over")
-        print("%r fraction of days were truly positive" %(float(trueTotalUp) / float(numTestingPoints)))
-        print("%r fraction of days were guessed to be positive" %(float(guessedTotalUp) / float(numTestingPoints)))
-        print("%r fraction of days had their directions correctly guessed" %(float(totalCorrectDirection) / float(numTestingPoints)))
+        print("%r fraction of days were truly positive" %(float(trueTotalUp) / float(self.numTestingPoints)))
+        print("%r fraction of days were guessed to be positive" %(float(guessedTotalUp) / float(self.numTestingPoints)))
+        print("%r fraction of days had their directions correctly guessed" %(float(totalCorrectDirection) / float(self.numTestingPoints)))
         if totalPointSixPlus > 0:
             ratio = float(correctPointSixPlus) / float(totalPointSixPlus)
         else:
@@ -425,9 +410,8 @@ class net:
         else:
             return -1
 
-    @staticmethod
-    def calculateSquaredError(guess, trueResult):
-        flattened = (1. / (1. + np.exp(-1. * steepnessOfCostFunction * trueResult)))
+    def calculateSquaredError(self, guess, trueResult):
+        flattened = (1. / (1. + np.exp(-1. * self.steepnessOfCostFunction * trueResult)))
         return (guess[0] - flattened)**2 + (guess[1] - (1 - flattened))**2
 
     @staticmethod
@@ -449,7 +433,10 @@ class net:
 
     @staticmethod
     def softplus(x):
-        return np.log(1 + np.exp(x))
+        try:
+            return np.log(1 + np.exp(x))
+        except:
+            return x
         
     @staticmethod
     def dSoftplusdV(x):
@@ -480,76 +467,3 @@ class net:
     @staticmethod
     def dSigmoiddV(x):
         return (1. / (1. + np.exp(-1. * x))) * (1. - (1. / (1. + np.exp(-1. * x))))
-    
-    
-class data:
-    def __init__(self, size):
-        self.size = size
-        try:
-            self.path = os.environ['MARKETDATADIR']
-        except KeyError:
-            raise KeyError('Environment variable "MARKETDATADIR" not set! Please set "MARKETDATADIR" to point where all market data should live first by appropriately updating variable in .bash_profile')
-        self.permutedDataFiles = np.random.permutation(os.listdir(self.path))
-        self.dataFileAt = 0
-        self.getNewDataFile()
-        
-    def getNewDataFile(self):
-        if self.dataFileAt >= len(self.permutedDataFiles):
-            raise IndexError("Ran out of data files")
-        fullPath = os.path.join(self.path, self.permutedDataFiles[self.dataFileAt])
-        with open(fullPath, 'r') as f:
-            self.currentDataFileInfo = f.readlines()
-        self.currentDataFileInfo = [float(line.rstrip('\%\n')) for line in self.currentDataFileInfo]
-        print("\n---------------NEW FILE OPENED: %r, file number %r--------------\n" %(self.permutedDataFiles[self.dataFileAt], self.dataFileAt))
-        if (len(self.currentDataFileInfo) < 101):
-            return self.getNewDataFile()
-        self.dataFileAt += 1
-        self.indexAtWithinPermutedIndices = 0
-        self.permutedIndices = np.random.permutation([x for x in range (sizeOfInput + 1, len(self.currentDataFileInfo))])
-        
-    def getNewDataPoint(self):
-        while (self.indexAtWithinPermutedIndices >= len(self.permutedIndices)) or (self.indexAtWithinPermutedIndices >= len(self.permutedIndices) * (fractionOfTotalDataToUse + .01)):
-            self.getNewDataFile()
-        index = self.permutedIndices[self.indexAtWithinPermutedIndices]
-        toReturn = self.currentDataFileInfo[index : index - self.size : -1], self.currentDataFileInfo[index - self.size]
-        self.indexAtWithinPermutedIndices += 1
-        #print(index)
-        #print(toReturn)
-        return toReturn
-    
-network = net(inTuple)
-
-print("\nTraining neural net with the following parameters")
-print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
-print("Fraction of Total Data Used: %r" %(fractionOfTotalDataToUse))
-print("Steepness of Cost Function = %r" %(steepnessOfCostFunction))
-print("Number of Layers : %r layers" %(network.numLayers))
-print("Layer 1 Size : %r neurons" %(network.LAYER1SIZE))
-print("Layer 2 Size : %r neurons" %(network.LAYER2SIZE))
-print("Layer 3 Size : %r neurons" %(network.LAYER3SIZE))
-print("Layer 4 Size : %r neurons" %(network.LAYER4SIZE))
-print("Layer 5 Size : %r neurons" %(network.LAYER5SIZE))
-print("eta : %r" %(network.eta))
-print("Data Points per Batch : %r" %(network.dataPointsPerBatch))
-print("Number of Training Epochs : %r" %(network.numTrainingEpochs))
-print("Number of Testing Points : %r" %(network.numTestingPoints))
-
-network.train()
-print("\n------------END TRAINING------------")
-print("------------BEGIN TESTING------------\n")
-network.test()
-print("\n------------END TESTING------------\n")
-
-print("Neural net was trained with the following parameters")
-print("Number of Total Data Points Available : %r" %(totalDataPointsAvailable))
-print("Fraction of Total Data Used: %r" %(fractionOfTotalDataToUse))
-print("Number of Layers : %r layers" %(network.numLayers))
-print("Layer 1 Size : %r neurons" %(network.LAYER1SIZE))
-print("Layer 2 Size : %r neurons" %(network.LAYER2SIZE))
-print("Layer 3 Size : %r neurons" %(network.LAYER3SIZE))
-print("Layer 4 Size : %r neurons" %(network.LAYER4SIZE))
-print("Layer 5 Size : %r neurons" %(network.LAYER5SIZE))
-print("eta : %r" %(network.eta))
-print("Data Points per Batch : %r" %(network.dataPointsPerBatch))
-print("Number of Training Epochs : %r" %(network.numTrainingEpochs))
-print("Number of Testing Points : %r" %(network.numTestingPoints))
