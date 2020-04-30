@@ -3,46 +3,47 @@ import os
 import numpy as np
 import random
 import time
+import params
 from dataManager import data
 
 frequencyOfPrint = 400
 
 class feedForwardNet:
 
-    def __init__(self, layerSizeTuple, neuronizingFunction, eta, dataPointsPerBatch, numTrainingEpochs, numTestingPoints, fractionOfTotalDataToUse, steepnessOfCostFunction):
+    def __init__(self):
         self.printCounter = 0
         
-        if neuronizingFunction == "SELU" or neuronizingFunction == "Selu" or neuronizingFunction == "selu":
+        if params.neuronizingFunction in ["SELU", "Selu", "selu"]:
             self.neuronizingFunction = self.SELU
             self.dNeuronizingFunctiondV = self.dSELUdV
-        elif neuronizingFunction == "SIGMOID" or neuronizingFunction == "Sigmoid" or neuronizingFunction == "sigmoid":
+        elif params.neuronizingFunction in ["SIGMOID", "Sigmoid", "sigmoid"]:
             self.neuronizingFunction = self.sigmoid
             self.dNeuronizingFunctiondV = self.dSigmoiddV
-        elif neuronizingFunction == "SOFTPLUS" or neuronizingFunction == "Softplus" or neuronizingFunction == "softplus":
+        elif params.neuronizingFunction in ["SOFTPLUS", "Softplus", "softplus"]:
             self.neuronizingFunction = self.softplus
             self.dNeuronizingFunctiondV = self.dSoftplusdV
         else:
             raise ValueError("Invalid neuronizing function. Please choose between SELU, Sigmoid, and Softplus")
         
-        if len(layerSizeTuple) == 2:
+        if len(params.layerSizeTuple) == 2:
             self.numLayers = 3
-            a, b = layerSizeTuple
+            a, b = params.layerSizeTuple
             self.LAYER1SIZE = 0
             self.LAYER2SIZE = 0
             self.LAYER3SIZE = a
             self.LAYER4SIZE = b
             self.INPUTLAYERSIZE = self.LAYER3SIZE
-        elif len(layerSizeTuple) == 3:
+        elif len(params.layerSizeTuple) == 3:
             self.numLayers = 4
-            a, b, c = layerSizeTuple
+            a, b, c = params.layerSizeTuple
             self.LAYER1SIZE = 0
             self.LAYER2SIZE = a
             self.LAYER3SIZE = b
             self.LAYER4SIZE = c
             self.INPUTLAYERSIZE = self.LAYER2SIZE
-        elif len(layerSizeTuple) == 4:
+        elif len(params.layerSizeTuple) == 4:
             self.numLayers = 5
-            a, b, c, d = layerSizeTuple
+            a, b, c, d = params.layerSizeTuple
             self.LAYER1SIZE = a
             self.LAYER2SIZE = b
             self.LAYER3SIZE = c
@@ -52,12 +53,12 @@ class feedForwardNet:
             raise ValueError("net.py only supports 3, 4, or 5 layered networks. Please enter tuple of length 2, 3, or 4, respectively, in the form (layerOneSize, layerTwoSize, (layerThreeSize), (layerFourSize)), where the final layer is not of variable length so you should not set it.")
         self.LAYER5SIZE = 2
         
-        self.eta = eta
-        self.dataPointsPerBatch = dataPointsPerBatch
-        self.numTrainingEpochs = numTrainingEpochs
-        self.numTestingPoints = numTestingPoints
-        self.steepnessOfCostFunction = steepnessOfCostFunction
-        self.dataObj = data(self.INPUTLAYERSIZE, fractionOfTotalDataToUse)
+        self.eta = params.eta
+        self.dataPointsPerBatch = params.dataPointsPerBatch
+        self.numTrainingEpochs = params.numTrainingEpochs
+        self.numTestingPoints = params.numTestingPoints
+        self.steepnessOfCostFunction = params.steepnessOfCostFunction
+        self.dataObj = data(self.INPUTLAYERSIZE, params.fractionOfTotalDataToUse)
         if self.neuronizingFunction == self.SELU:
             self.initializeWeightsLeCun()
         else:
