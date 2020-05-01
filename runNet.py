@@ -1,5 +1,4 @@
 from feedForwardNet import feedForwardNet
-from LSTMNet import LSTMNet
 import params
 
 if params.typeOfNet in ["FEED FORWARD", "Feed Forward", "feed forward", "feedForward", "FF", "ff"]:
@@ -21,6 +20,7 @@ print("Layer 4 Size : %r neurons" %(network.LAYER4SIZE))
 print("Layer 5 Size : %r neurons" %(network.LAYER5SIZE))
 print("Using %r neuronizing function" %(network.neuronizingFunction.__name__))
 print("eta : %r" %(network.eta))
+print("Dropout Rate : %r" %(network.dropoutRate))
 print("Data Points per Batch : %r" %(network.dataPointsPerBatch))
 print("Number of Training Epochs : %r" %(network.numTrainingEpochs))
 print("Number of Testing Points : %r" %(network.numTestingPoints))
@@ -43,6 +43,7 @@ print("Layer 4 Size : %r neurons" %(network.LAYER4SIZE))
 print("Layer 5 Size : %r neurons" %(network.LAYER5SIZE))
 print("Used %r neuronizing function" %(network.neuronizingFunction.__name__))
 print("eta : %r" %(network.eta))
+print("Dropout Rate : %r" %(network.dropoutRate))
 print("Data Points per Batch : %r" %(network.dataPointsPerBatch))
 print("Number of Training Epochs : %r" %(network.numTrainingEpochs))
 print("Number of Testing Points : %r" %(network.numTestingPoints))

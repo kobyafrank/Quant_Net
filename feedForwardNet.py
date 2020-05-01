@@ -7,6 +7,9 @@ import params
 from dataManager import data
 
 frequencyOfPrint = 400
+alpha = 1.6732632423543772848170429916717
+gamma = 1.0507009873554804934193349852946
+alphaStar = -1. * alpha * gamma
 
 class feedForwardNet:
 
@@ -54,6 +57,7 @@ class feedForwardNet:
         self.LAYER5SIZE = 2
         
         self.eta = params.eta
+        self.dropoutRate = params.dropoutRate
         self.dataPointsPerBatch = params.dataPointsPerBatch
         self.numTrainingEpochs = params.numTrainingEpochs
         self.numTestingPoints = params.numTestingPoints
@@ -108,6 +112,9 @@ class feedForwardNet:
 
     def sendThroughNetTrain(self, inputData, trueResult):
         #Calculates output of neural net with input "inputData"
+        l4Kept = []
+        l3Kept = []
+        l2Kept = []
         if self.numLayers == 5:
             if len(inputData) != self.LAYER1SIZE:
                 raise ValueError("Input data is not of length %r" % self.LAYER1SIZE)
@@ -115,26 +122,60 @@ class feedForwardNet:
             layer2Values = [0 for x in range (self.LAYER2SIZE)]
             layer3Values = [0 for x in range (self.LAYER3SIZE)]
             for L2Neuron in range (self.LAYER2SIZE):
-                layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
+                if random.uniform(0, 1) < self.dropoutRate:
+                    if self.neuronizingFunction == self.SELU:
+                        layer2Values[L2Neuron] = alphaStar
+                    else:
+                        layer2Values[L2Neuron] = 0
+                else:
+                    l2Kept.append(L2Neuron)
+                    layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
             for L3Neuron in range (self.LAYER3SIZE):
-                layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+                if random.uniform(0, 1) < self.dropoutRate:
+                    if self.neuronizingFunction == self.SELU:
+                        layer3Values[L3Neuron] = alphaStar
+                    else:
+                        layer3Values[L3Neuron] = 0
+                else:
+                    l3Kept.append(L3Neuron)
+                    layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+                    
         elif self.numLayers == 4:
             if len(inputData) != self.LAYER2SIZE:
                 raise ValueError("Input data is not of length %r" % self.LAYER2SIZE)
             layer2Values = inputData
+            l2Kept = [x for x in range (self.LAYER2SIZE)]
             layer3Values = [0 for x in range (self.LAYER3SIZE)]
             for L3Neuron in range (self.LAYER3SIZE):
-                layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+                if random.uniform(0, 1) < self.dropoutRate:
+                    if self.neuronizingFunction == self.SELU:
+                        layer3Values[L3Neuron] = alphaStar
+                    else:
+                        layer3Values[L3Neuron] = 0
+                else:
+                    l3Kept.append(L3Neuron)
+                    layer3Values[L3Neuron] = self.neuronizingFunction(self.layer3Biases[L3Neuron] + np.dot(layer2Values, self.layer32Weights[L3Neuron]))
+                    
         else:
             if len(inputData) != self.LAYER3SIZE:
                 raise ValueError("Input data is not of length %r" % self.LAYER3SIZE)
             layer3Values = inputData
+            l3Kept = [x for x in range (self.LAYER3SIZE)]
+            
         layer4Values = [0 for x in range (self.LAYER4SIZE)]
         layer5Values = [0 for x in range (self.LAYER5SIZE)]
         for L4Neuron in range (self.LAYER4SIZE):
-            layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
+            if random.uniform(0, 1) < self.dropoutRate:
+                if self.neuronizingFunction == self.SELU:
+                    layer4Values[L4Neuron] = alphaStar
+                else:
+                    layer4Values[L4Neuron] = 0
+            else:
+                l4Kept.append(L4Neuron)
+                layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
             layer5Values[L5Neuron] = self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron])
+            
         layer5Values = self.softmax(layer5Values)
         if self.printCounter ==  0:
             print((layer5Values, trueResult))
@@ -156,7 +197,7 @@ class feedForwardNet:
         gradientLayer5Biases = [0 for x in range(self.LAYER5SIZE)]
         gradientLayer43Weights = [[0 for x in range(self.LAYER3SIZE)] for y in range (self.LAYER4SIZE)]
         gradientLayer54Weights = [[0 for x in range(self.LAYER4SIZE)] for y in range (self.LAYER5SIZE)]
-        
+
         for L5Neuron in range (self.LAYER5SIZE):
             flattened = (1. / (1. + np.exp(-1. * self.steepnessOfCostFunction * trueResult)))
             if (L5Neuron == 0):
@@ -166,15 +207,15 @@ class feedForwardNet:
             dL5PostNeuronizingFunctiondL5V = self.dSoftmaxdV(layer5Values, L5Neuron)
             gradientLayer5Biases[L5Neuron] = dCostdL5PostNeuronizingFunction * dL5PostNeuronizingFunctiondL5V
             
-            for L4Neuron in range (self.LAYER4SIZE):
+            for L4Neuron in l4Kept:
                 dL5VdL54Weight = layer4Values[L4Neuron]
                 gradientLayer54Weights[L5Neuron][L4Neuron] = gradientLayer5Biases[L5Neuron] * dL5VdL54Weight
-            
+        
                 dL5VdL4PostNeuronizingFunction = self.layer54Weights[L5Neuron][L4Neuron]
                 dL4PostNeuronizingFunctiondL4V = self.dNeuronizingFunctiondV(layer4Values[L4Neuron])
                 gradientLayer4Biases[L4Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V)
         
-                for L3Neuron in range (self.LAYER3SIZE):
+                for L3Neuron in l3Kept:
                     dL4VdL43Weight = layer3Values[L3Neuron]
                     gradientLayer43Weights[L4Neuron][L3Neuron] += gradientLayer4Biases[L4Neuron] * dL4VdL43Weight
                     
@@ -183,10 +224,10 @@ class feedForwardNet:
                         dL3PostNeuronizingFunctiondL3V = self.dNeuronizingFunctiondV(layer3Values[L3Neuron])
                         gradientLayer3Biases[L3Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V)
             
-                        for L2Neuron in range (self.LAYER2SIZE):
+                        for L2Neuron in l2Kept:
                             dL3VdL32Weight = layer2Values[L2Neuron]
                             gradientLayer32Weights[L3Neuron][L2Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL32Weight)
-                            
+                        
                             if self.numLayers >= 5:
                                 dL3VdL2PostNeuronizingFunction = self.layer32Weights[L3Neuron][L2Neuron]
                                 dL2PostNeuronizingFunctiondL2V = self.dNeuronizingFunctiondV(layer2Values[L2Neuron])
@@ -195,7 +236,8 @@ class feedForwardNet:
                                 for L1Neuron in range (self.LAYER1SIZE):
                                     dL2VdL21Weights = layer1Values[L1Neuron]
                                     gradientLayer21Weights[L2Neuron][L1Neuron] += (gradientLayer5Biases[L5Neuron] * dL5VdL4PostNeuronizingFunction * dL4PostNeuronizingFunctiondL4V * dL4VdL3PostNeuronizingFunction * dL3PostNeuronizingFunctiondL3V * dL3VdL2PostNeuronizingFunction * dL2PostNeuronizingFunctiondL2V * dL2VdL21Weights)
-           
+                                                
+        #print("Actual: l4drop = %r, l3drop = %r, l2drop = %r" %(self.LAYER4SIZE - len(l4Kept), self.LAYER3SIZE - len(l3Kept), self.LAYER2SIZE - len(l2Kept)))
         if self.numLayers == 5:
             return (correctDirection, squaredError, gradientLayer21Weights, gradientLayer32Weights, gradientLayer43Weights, gradientLayer54Weights, gradientLayer2Biases, gradientLayer3Biases, gradientLayer4Biases, gradientLayer5Biases)
         elif self.numLayers == 4:
@@ -323,6 +365,12 @@ class feedForwardNet:
         return layer5Values
         
     def test(self):
+        if self.numLayers == 5:
+            np.multiply(1. - self.dropoutRate, self.layer21Weights)
+        if self.numLayers == 4:
+            np.multiply(1. - self.dropoutRate, self.layer32Weights)
+        np.multiply(1. - self.dropoutRate, self.layer43Weights)
+        
         trueTotalUp = 0
         guessedTotalUp = 0
         totalCorrectDirection = 0
@@ -334,6 +382,7 @@ class feedForwardNet:
         totalPointEightPlus = 0
         correctPointNinePlus = 0
         totalPointNinePlus = 0
+        
         for test in range (self.numTestingPoints):
             inputData, trueResult = self.dataObj.getNewDataPoint()
             guessedResult = self.sendThroughNetTest(inputData, trueResult)
@@ -445,8 +494,6 @@ class feedForwardNet:
     
     @staticmethod
     def SELU(x):
-        alpha = 1.6732632423543772848170429916717
-        gamma = 1.0507009873554804934193349852946
         if x > 0:
             return gamma * x
         else:
@@ -454,8 +501,6 @@ class feedForwardNet:
         
     @staticmethod
     def dSELUdV(x):
-        alpha = 1.6732632423543772848170429916717
-        gamma = 1.0507009873554804934193349852946
         if x > 0:
             return gamma
         else:
@@ -463,8 +508,17 @@ class feedForwardNet:
         
     @staticmethod
     def sigmoid(x):
-        return (1. / (1. + np.exp(-1. * x)))
+        try:
+            return (1. / (1. + np.exp(-1. * x)))
+        except:
+            if x < 0:
+                return 0.
+            else:
+                return 1.
         
     @staticmethod
     def dSigmoiddV(x):
-        return (1. / (1. + np.exp(-1. * x))) * (1. - (1. / (1. + np.exp(-1. * x))))
+        try:
+            return (1. / (1. + np.exp(-1. * x))) * (1. - (1. / (1. + np.exp(-1. * x))))
+        except:
+            return 0
