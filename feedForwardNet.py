@@ -5,11 +5,9 @@ import random
 import time
 import params
 from dataManager import data
+import staticFuncs as sF
 
 frequencyOfPrint = 400
-alpha = 1.6732632423543772848170429916717
-gamma = 1.0507009873554804934193349852946
-alphaStar = -1. * alpha * gamma
 
 class feedForwardNet:
 
@@ -17,14 +15,14 @@ class feedForwardNet:
         self.printCounter = 0
         
         if params.neuronizingFunction in ["SELU", "Selu", "selu"]:
-            self.neuronizingFunction = self.SELU
-            self.dNeuronizingFunctiondV = self.dSELUdV
+            self.neuronizingFunction = sF.SELU
+            self.dNeuronizingFunctiondV = sF.dSELUdV
         elif params.neuronizingFunction in ["SIGMOID", "Sigmoid", "sigmoid"]:
-            self.neuronizingFunction = self.sigmoid
-            self.dNeuronizingFunctiondV = self.dSigmoiddV
+            self.neuronizingFunction = sF.sigmoid
+            self.dNeuronizingFunctiondV = sF.dSigmoiddV
         elif params.neuronizingFunction in ["SOFTPLUS", "Softplus", "softplus"]:
-            self.neuronizingFunction = self.softplus
-            self.dNeuronizingFunctiondV = self.dSoftplusdV
+            self.neuronizingFunction = sF.softplus
+            self.dNeuronizingFunctiondV = sF.dSoftplusdV
         else:
             raise ValueError("Invalid neuronizing function. Please choose between SELU, Sigmoid, and Softplus")
         
@@ -63,7 +61,7 @@ class feedForwardNet:
         self.numTestingPoints = params.numTestingPoints
         self.steepnessOfCostFunction = params.steepnessOfCostFunction
         self.dataObj = data(self.INPUTLAYERSIZE, params.fractionOfTotalDataToUse)
-        if self.neuronizingFunction == self.SELU:
+        if self.neuronizingFunction == sF.SELU:
             self.initializeWeightsLeCun()
         else:
             self.initializeWeightsXavier()
@@ -123,8 +121,8 @@ class feedForwardNet:
             layer3Values = [0 for x in range (self.LAYER3SIZE)]
             for L2Neuron in range (self.LAYER2SIZE):
                 if random.uniform(0, 1) < self.dropoutRate:
-                    if self.neuronizingFunction == self.SELU:
-                        layer2Values[L2Neuron] = alphaStar
+                    if self.neuronizingFunction == sF.SELU:
+                        layer2Values[L2Neuron] = sF.alphaStar
                     else:
                         layer2Values[L2Neuron] = 0
                 else:
@@ -132,8 +130,8 @@ class feedForwardNet:
                     layer2Values[L2Neuron] = self.neuronizingFunction(self.layer2Biases[L2Neuron] + np.dot(layer1Values, self.layer21Weights[L2Neuron]))
             for L3Neuron in range (self.LAYER3SIZE):
                 if random.uniform(0, 1) < self.dropoutRate:
-                    if self.neuronizingFunction == self.SELU:
-                        layer3Values[L3Neuron] = alphaStar
+                    if self.neuronizingFunction == sF.SELU:
+                        layer3Values[L3Neuron] = sF.alphaStar
                     else:
                         layer3Values[L3Neuron] = 0
                 else:
@@ -148,8 +146,8 @@ class feedForwardNet:
             layer3Values = [0 for x in range (self.LAYER3SIZE)]
             for L3Neuron in range (self.LAYER3SIZE):
                 if random.uniform(0, 1) < self.dropoutRate:
-                    if self.neuronizingFunction == self.SELU:
-                        layer3Values[L3Neuron] = alphaStar
+                    if self.neuronizingFunction == sF.SELU:
+                        layer3Values[L3Neuron] = sF.alphaStar
                     else:
                         layer3Values[L3Neuron] = 0
                 else:
@@ -166,8 +164,8 @@ class feedForwardNet:
         layer5Values = [0 for x in range (self.LAYER5SIZE)]
         for L4Neuron in range (self.LAYER4SIZE):
             if random.uniform(0, 1) < self.dropoutRate:
-                if self.neuronizingFunction == self.SELU:
-                    layer4Values[L4Neuron] = alphaStar
+                if self.neuronizingFunction == sF.SELU:
+                    layer4Values[L4Neuron] = sF.alphaStar
                 else:
                     layer4Values[L4Neuron] = 0
             else:
@@ -176,12 +174,12 @@ class feedForwardNet:
         for L5Neuron in range (self.LAYER5SIZE):
             layer5Values[L5Neuron] = self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron])
             
-        layer5Values = self.softmax(layer5Values)
+        layer5Values = sF.softmax(layer5Values)
         if self.printCounter ==  0:
             print((layer5Values, trueResult))
         self.printCounter = (self.printCounter + 1) % frequencyOfPrint
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
-        correctDirection = self.sameSign(self.directionize(layer5Values), trueResult)
+        correctDirection = sF.sameSign(sF.directionize(layer5Values), trueResult)
         
         #Calculates gradient for training purposes
         if self.numLayers == 5:
@@ -204,7 +202,7 @@ class feedForwardNet:
                 dCostdL5PostNeuronizingFunction = 2 * (layer5Values[L5Neuron] - flattened)
             else:
                 dCostdL5PostNeuronizingFunction = 2 * (layer5Values[L5Neuron] - (1 - flattened))
-            dL5PostNeuronizingFunctiondL5V = self.dSoftmaxdV(layer5Values, L5Neuron)
+            dL5PostNeuronizingFunctiondL5V = sF.dSoftmaxdV(layer5Values, L5Neuron)
             gradientLayer5Biases[L5Neuron] = dCostdL5PostNeuronizingFunction * dL5PostNeuronizingFunctiondL5V
             
             for L4Neuron in l4Kept:
@@ -360,7 +358,7 @@ class feedForwardNet:
             layer4Values[L4Neuron] = self.neuronizingFunction(self.layer4Biases[L4Neuron] + np.dot(layer3Values, self.layer43Weights[L4Neuron]))
         for L5Neuron in range (self.LAYER5SIZE):
             layer5Values[L5Neuron] = self.layer5Biases[L5Neuron] + np.dot(layer4Values, self.layer54Weights[L5Neuron])
-        layer5Values = self.softmax(layer5Values)
+        layer5Values = sF.softmax(layer5Values)
         squaredError = self.calculateSquaredError(layer5Values, trueResult)
         return layer5Values
         
@@ -386,12 +384,12 @@ class feedForwardNet:
         for test in range (self.numTestingPoints):
             inputData, trueResult = self.dataObj.getNewDataPoint()
             guessedResult = self.sendThroughNetTest(inputData, trueResult)
-            guessedUp = (1 == self.directionize(guessedResult))
+            guessedUp = (1 == sF.directionize(guessedResult))
             if trueResult >= 0:
                 trueTotalUp += 1
             if guessedUp:
                 guessedTotalUp += 1
-            correctDirection = self.sameSign(self.directionize(guessedResult), trueResult)
+            correctDirection = sF.sameSign(sF.directionize(guessedResult), trueResult)
             if guessedResult[0] <= .1 or guessedResult[0] >= .9:
                 totalPointNinePlus += 1
                 totalPointEightPlus += 1
@@ -449,76 +447,8 @@ class feedForwardNet:
             ratio = 0.
         print("%r fraction of days with confidence over .9 had their directions correctly guessed, or %r / %r" %(ratio, correctPointNinePlus, totalPointNinePlus))
 
-    @staticmethod
-    def sameSign(x, y):
-        return ((x >= 0 and y >= 0) or (x < 0 and y < 0))
-
-    @staticmethod
-    def directionize(ls):
-        if (ls[0] >= ls[1]):
-            return 1
-        else:
-            return -1
-
     def calculateSquaredError(self, guess, trueResult):
         flattened = (1. / (1. + np.exp(-1. * self.steepnessOfCostFunction * trueResult)))
         return (guess[0] - flattened)**2 + (guess[1] - (1 - flattened))**2
 
-    @staticmethod
-    def softmax(ls):
-        sum = 0
-        m = max(ls)
-        for x in ls:
-            sum += np.exp(x - m)
-        return [np.exp(i - m) / sum for i in ls]
-        
-    @staticmethod
-    def dSoftmaxdV(ls, i):
-        sum = 0
-        m = max(ls)
-        for x in ls:
-            sum += np.exp(x - m)
-        s = np.exp(i - m) / sum
-        return s * (1 - s)
-
-    @staticmethod
-    def softplus(x):
-        try:
-            return np.log(1 + np.exp(x))
-        except:
-            return x
-        
-    @staticmethod
-    def dSoftplusdV(x):
-        return (1. / (1. + np.exp(-1. * x)))
     
-    @staticmethod
-    def SELU(x):
-        if x > 0:
-            return gamma * x
-        else:
-            return gamma * alpha * (np.exp(x) - 1.)
-        
-    @staticmethod
-    def dSELUdV(x):
-        if x > 0:
-            return gamma
-        else:
-            return gamma * alpha * np.exp(x)
-        
-    @staticmethod
-    def sigmoid(x):
-        try:
-            return (1. / (1. + np.exp(-1. * x)))
-        except:
-            if x < 0:
-                return 0.
-            else:
-                return 1.
-        
-    @staticmethod
-    def dSigmoiddV(x):
-        try:
-            return (1. / (1. + np.exp(-1. * x))) * (1. - (1. / (1. + np.exp(-1. * x))))
-        except:
-            return 0
